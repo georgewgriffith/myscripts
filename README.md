@@ -1,7 +1,7 @@
 # Monitor OrientDB Performance and System Metrics
 
 ## Overview
-This script (`monitor_orientdb_safe.sh`) collects and logs **critical performance metrics** from an OrientDB database while ensuring **safe resource usage** on the host machine. It outputs data in **JSON, XML, and CSV** formats for easy analysis and prevents excessive resource consumption.
+This script (`monitor_orientdb.sh`) collects and logs **critical performance metrics** from an OrientDB database while ensuring **safe resource usage** on the host machine. It outputs data in **JSON, XML, and CSV** formats for easy analysis and prevents excessive resource consumption.
 
 ## Features
 - **Collects CPU, Memory, Disk IOPS, Network Traffic, and Query Performance Metrics**
@@ -12,6 +12,23 @@ This script (`monitor_orientdb_safe.sh`) collects and logs **critical performanc
 - **Compatible with RHEL 7+ (uses standard CLI tools)**
 - **Provides suggested configuration values for Azure PostgreSQL provisioning**
 - **Includes guidance on provisioning Azure PostgreSQL using collected metrics**
+
+## Customization Options
+
+The script allows users to **customize monitoring parameters** using command-line arguments.
+
+### **Available Options**
+| Option | Description | Default Value |
+|--------|-------------|--------------|
+| `-d <device>` | Specify the disk device to monitor | `sda` |
+| `-n <interface>` | Specify the network interface to monitor | `eth0` |
+| `-i <seconds>` | Set the monitoring interval (in seconds) | `60` |
+| `-t <hours>` | Set the total duration (in hours) | `6` |
+| `-o <directory>` | Set the output directory for metrics logs | `$HOME/orientdb_metrics` |
+
+### **Usage Example**
+```bash
+./monitor_orientdb.sh -d nvme0n1 -n ens160 -i 30 -t 12 -o /var/log/orientdb_metrics
 
 ## Collected Metrics
 ### **System Performance Metrics**
