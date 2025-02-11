@@ -29,6 +29,7 @@ The script allows users to **customize monitoring parameters** using command-lin
 ### **Usage Example**
 ```bash
 ./monitor_orientdb.sh -d nvme0n1 -n ens160 -i 30 -t 12 -o /var/log/orientdb_metrics
+```
 
 ## Collected Metrics
 ### **System Performance Metrics**
