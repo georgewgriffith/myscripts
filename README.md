@@ -57,20 +57,28 @@ Adjust `--sku-name`, `--storage-size`, and `--max-connections` according to the 
 - Enable **`pg_stat_statements`** for query analysis.
 - Optimize **indexes** and tune `work_mem`.
 
-### **How do I securely connect to Azure PostgreSQL?**
-- Use **VNET integration** and **Private Link** for enhanced security.
+## Disclaimer
 
-### **What happens if my workload increases?**
-- Consider enabling **PostgreSQL autoscaling**.
-- Increase **vCPUs** or **upgrade storage tiers** dynamically.
+### Use at Your Own Risk
+
+This script and the accompanying documentation are provided as is, without warranties or guarantees of any kind. The author(s) disclaim all liability for any loss, damage, disruption, or other issues arising directly or indirectly from the use of this script.
+
+### No Guarantee of Accuracy
+
+While efforts have been made to ensure the accuracy of the provided information, the author(s) do not guarantee that the suggested configurations will be suitable for your specific workload or environment. Users must validate all settings before applying them to production systems.
+
+### No Liability for System Issues
+
+By using this script, you agree that the author(s) are not responsible for:
+
+- Unexpected system crashes, failures, or downtime.
+- Data loss, corruption, or security vulnerabilities.
+- Increased costs due to misconfiguration or over-provisioning.
+- Regulatory or compliance violations caused by incorrect settings.
+
+### Modifications and Redistribution
+
+You are free to modify and distribute this script, but you must acknowledge the risks and test configurations before applying them in any critical environment. Users assume full responsibility for any modifications made.
 
 ## License
 This script is open-source and can be modified as needed. Use at your own risk.
-
-## Author
-- **Developed by:** [Your Name / Team]
-- **Contact:** [Your Email / GitHub]
-
----
-
-This README provides **detailed instructions** for **both technical and non-technical users**, ensuring a smooth setup and execution.
