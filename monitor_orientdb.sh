@@ -10,6 +10,24 @@ END_TIME=$((SECONDS + DURATION_HOURS * 3600))
 
 JMX_HOST="localhost"
 JMX_PORT="1099"
+DISK_DEVICE="sda"  # Default disk device
+NETWORK_INTERFACE="eth0"  # Default network interface
+LOG_FILE="$OUTPUT_DIR/monitor.log"
+OUTPUT_FORMAT="json"  # Default format
+
+# Allow customization via script parameters
+while getopts "d:n:i:t:o:f:h" opt; do
+    case ${opt} in
+        d ) DISK_DEVICE=$OPTARG ;;  # Custom disk device
+        n ) NETWORK_INTERFACE=$OPTARG ;;  # Custom network interface
+        i ) INTERVAL=$OPTARG ;;  # Custom interval
+        t ) DURATION_HOURS=$OPTARG ;;  # Custom duration
+        o ) OUTPUT_DIR=$OPTARG ;;  # Custom output directory
+        f ) OUTPUT_FORMAT=$OPTARG ;;  # Custom output format (json, csv, xml)
+        h ) echo "Usage: $0 [-d disk_device] [-n network_interface] [-i interval] [-t duration_hours] [-o output_dir] [-f output_format]"; exit 0 ;;
+        * ) echo "Invalid option"; exit 1 ;;
+    esac
+done
 
 # Define safe memory and disk thresholds
 SAFE_MEMORY_THRESHOLD_MB=200  # Minimum free memory to continue execution
@@ -26,7 +44,7 @@ total_iterations=0
 
 # ================== FUNCTION: CHECK DEPENDENCIES ==================
 check_command() {
-    command -v "$1" >/dev/null 2>&1 || { echo "ERROR: $1 is not installed. Exiting."; exit 1; }
+    command -v "$1" >/dev/null 2>&1 || { echo "ERROR: $1 is not installed. Exiting." | tee -a "$LOG_FILE"; exit 1; }
 }
 
 # Verify all required commands exist
@@ -39,39 +57,37 @@ check_command awk
 check_command bc
 
 # ================== MONITORING LOOP ==================
+echo "$(date) - Monitoring started" | tee -a "$LOG_FILE"
 while [ $SECONDS -lt $END_TIME ]; do
     TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 
     # ================== RESOURCE SAFETY CHECKS ==================
     FREE_MEM_MB=$(free -m | awk '/Mem:/ {print $4}')
     if [[ "$FREE_MEM_MB" -lt "$SAFE_MEMORY_THRESHOLD_MB" ]]; then
-        echo "WARNING: Low memory ($FREE_MEM_MB MB). Skipping this cycle to prevent OOM."
+        echo "$(date) - WARNING: Low memory ($FREE_MEM_MB MB). Skipping this cycle to prevent OOM." | tee -a "$LOG_FILE"
         sleep "$INTERVAL"
         continue
     fi
 
     FREE_DISK_MB=$(df -m "$OUTPUT_DIR" | awk 'NR==2 {print $4}')
     if [[ "$FREE_DISK_MB" -lt "$SAFE_DISK_THRESHOLD_MB" ]]; then
-        echo "WARNING: Low disk space ($FREE_DISK_MB MB). Skipping this cycle."
+        echo "$(date) - WARNING: Low disk space ($FREE_DISK_MB MB). Skipping this cycle." | tee -a "$LOG_FILE"
         sleep "$INTERVAL"
         continue
     fi
 
-    # ================== SYSTEM METRICS COLLECTION ==================
-    DISK_STATS=$(iostat -dx 1 1 | awk '/sda/ {print $4, $5}')
+    # ================== SYSTEM LOAD MONITORING ==================
+    LOAD_AVG=$(awk '{print $1, $2, $3}' /proc/loadavg)
+
+    # ================== DISK IOPS MONITORING ==================
+    DISK_STATS=$(iostat -dx 1 1 | awk -v disk="$DISK_DEVICE" '$1 == disk {print $4, $5}')
     DISK_READ=$(echo "$DISK_STATS" | awk '{print $1}')
     DISK_WRITE=$(echo "$DISK_STATS" | awk '{print $2}')
     total_disk_read=$(echo "$total_disk_read + $DISK_READ" | bc)
     total_disk_write=$(echo "$total_disk_write + $DISK_WRITE" | bc)
 
-    VM_STATS=$(vmstat 1 1 | awk 'NR==3 {print $13, $14, $4}')
-    CPU_USER=$(echo "$VM_STATS" | awk '{print $1}')
-    CPU_SYSTEM=$(echo "$VM_STATS" | awk '{print $2}')
-    MEMORY_FREE=$(echo "$VM_STATS" | awk '{print $3}')
-    total_cpu=$(echo "$total_cpu + $CPU_USER + $CPU_SYSTEM" | bc)
-    total_memory=$(echo "$total_memory + $MEMORY_FREE" | bc)
-
-    NET_STATS=$(sar -n DEV 1 1 | awk '/eth0/ {print $5, $6}')
+    # ================== NETWORK MONITORING ==================
+    NET_STATS=$(sar -n DEV 1 1 | awk -v iface="$NETWORK_INTERFACE" '$2 == iface {print $5, $6}')
     NET_RX=$(echo "$NET_STATS" | awk '{print $1}')
     NET_TX=$(echo "$NET_STATS" | awk '{print $2}')
     total_net_rx=$(echo "$total_net_rx + $NET_RX" | bc)
@@ -79,7 +95,7 @@ while [ $SECONDS -lt $END_TIME ]; do
 
     total_iterations=$((total_iterations + 1))
 
-    # ================== ORIENTDB METRICS VIA JMX ==================
+    # ================== ORIENTDB CACHE HIT RATIO VIA JMX ==================
     CACHE_HIT_RATIO="N/A"
     JMX_STATS=$(echo "open $JMX_HOST:$JMX_PORT
 get com.orientechnologies.orient.server:type=OSharedContextCache HitRatio
@@ -88,7 +104,7 @@ quit" | jmxterm 2>/dev/null | grep "HitRatio" | awk '{print $NF}')
         CACHE_HIT_RATIO="$JMX_STATS"
     fi
 
-    # ================== SUGGESTED AZURE POSTGRESQL VALUES ==================
+    # ================== AZURE POSTGRESQL SUGGESTED VALUES ==================
     SUGGESTED_VCPUS="$(echo "scale=0; ($total_cpu / $total_iterations) / 25 + 1" | bc)vCPUs"
     SUGGESTED_NETWORK_THROUGHPUT="$(echo "scale=2; ($total_net_rx + $total_net_tx) / $total_iterations" | bc) Mbps"
     RECOMMENDED_EXTENSIONS="pg_stat_statements,pg_cron,pg_partman"
