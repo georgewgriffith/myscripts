@@ -43,7 +43,6 @@ while [ $SECONDS -lt $END_TIME ]; do
     TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 
     # ================== RESOURCE SAFETY CHECKS ==================
-    # Check free memory to prevent triggering OOM killer
     FREE_MEM_MB=$(free -m | awk '/Mem:/ {print $4}')
     if [[ "$FREE_MEM_MB" -lt "$SAFE_MEMORY_THRESHOLD_MB" ]]; then
         echo "WARNING: Low memory ($FREE_MEM_MB MB). Skipping this cycle to prevent OOM."
@@ -51,7 +50,6 @@ while [ $SECONDS -lt $END_TIME ]; do
         continue
     fi
 
-    # Check free disk space to prevent storage exhaustion
     FREE_DISK_MB=$(df -m "$OUTPUT_DIR" | awk 'NR==2 {print $4}')
     if [[ "$FREE_DISK_MB" -lt "$SAFE_DISK_THRESHOLD_MB" ]]; then
         echo "WARNING: Low disk space ($FREE_DISK_MB MB). Skipping this cycle."
@@ -59,37 +57,29 @@ while [ $SECONDS -lt $END_TIME ]; do
         continue
     fi
 
-    # ================== DISK IOPS MONITORING ==================
+    # ================== SYSTEM METRICS COLLECTION ==================
     DISK_STATS=$(iostat -dx 1 1 | awk '/sda/ {print $4, $5}')
     DISK_READ=$(echo "$DISK_STATS" | awk '{print $1}')
     DISK_WRITE=$(echo "$DISK_STATS" | awk '{print $2}')
-    
-    # Ensure values are numeric before adding to totals
-    [[ "$DISK_READ" =~ ^[0-9.]+$ ]] && total_disk_read=$(echo "$total_disk_read + $DISK_READ" | bc)
-    [[ "$DISK_WRITE" =~ ^[0-9.]+$ ]] && total_disk_write=$(echo "$total_disk_write + $DISK_WRITE" | bc)
+    total_disk_read=$(echo "$total_disk_read + $DISK_READ" | bc)
+    total_disk_write=$(echo "$total_disk_write + $DISK_WRITE" | bc)
 
-    # ================== CPU & MEMORY MONITORING ==================
     VM_STATS=$(vmstat 1 1 | awk 'NR==3 {print $13, $14, $4}')
     CPU_USER=$(echo "$VM_STATS" | awk '{print $1}')
     CPU_SYSTEM=$(echo "$VM_STATS" | awk '{print $2}')
     MEMORY_FREE=$(echo "$VM_STATS" | awk '{print $3}')
+    total_cpu=$(echo "$total_cpu + $CPU_USER + $CPU_SYSTEM" | bc)
+    total_memory=$(echo "$total_memory + $MEMORY_FREE" | bc)
 
-    # Validate and accumulate values
-    [[ "$CPU_USER" =~ ^[0-9]+$ ]] && total_cpu=$(echo "$total_cpu + $CPU_USER + $CPU_SYSTEM" | bc)
-    [[ "$MEMORY_FREE" =~ ^[0-9]+$ ]] && total_memory=$(echo "$total_memory + $MEMORY_FREE" | bc)
-
-    # ================== NETWORK MONITORING ==================
     NET_STATS=$(sar -n DEV 1 1 | awk '/eth0/ {print $5, $6}')
     NET_RX=$(echo "$NET_STATS" | awk '{print $1}')
     NET_TX=$(echo "$NET_STATS" | awk '{print $2}')
+    total_net_rx=$(echo "$total_net_rx + $NET_RX" | bc)
+    total_net_tx=$(echo "$total_net_tx + $NET_TX" | bc)
 
-    [[ "$NET_RX" =~ ^[0-9.]+$ ]] && total_net_rx=$(echo "$total_net_rx + $NET_RX" | bc)
-    [[ "$NET_TX" =~ ^[0-9.]+$ ]] && total_net_tx=$(echo "$total_net_tx + $NET_TX" | bc)
-
-    # Increment count for averaging calculations
     total_iterations=$((total_iterations + 1))
 
-    # ================== ORIENTDB CACHE HIT RATIO VIA JMX ==================
+    # ================== ORIENTDB METRICS VIA JMX ==================
     CACHE_HIT_RATIO="N/A"
     JMX_STATS=$(echo "open $JMX_HOST:$JMX_PORT
 get com.orientechnologies.orient.server:type=OSharedContextCache HitRatio
@@ -98,16 +88,10 @@ quit" | jmxterm 2>/dev/null | grep "HitRatio" | awk '{print $NF}')
         CACHE_HIT_RATIO="$JMX_STATS"
     fi
 
-    # ================== ORIENTDB DISK I/O USING IOTOP ==================
-    ORIENTDB_PID=$(pgrep -f 'orientdb' | head -n1)
-    IO_READ="N/A"
-    IO_WRITE="N/A"
-    
-    if [[ -n "$ORIENTDB_PID" ]]; then
-        IOTOP_STATS=$(iotop -b -n 1 -p "$ORIENTDB_PID" | awk 'NR>2 {print $4, $10}')
-        IO_READ=$(echo "$IOTOP_STATS" | awk '{print $1}')
-        IO_WRITE=$(echo "$IOTOP_STATS" | awk '{print $2}')
-    fi
+    # ================== SUGGESTED AZURE POSTGRESQL VALUES ==================
+    SUGGESTED_VCPUS="$(echo "scale=0; ($total_cpu / $total_iterations) / 25 + 1" | bc)vCPUs"
+    SUGGESTED_NETWORK_THROUGHPUT="$(echo "scale=2; ($total_net_rx + $total_net_tx) / $total_iterations" | bc) Mbps"
+    RECOMMENDED_EXTENSIONS="pg_stat_statements,pg_cron,pg_partman"
 
     # ================== OUTPUT TO JSON ==================
     echo "{
@@ -118,13 +102,11 @@ quit" | jmxterm 2>/dev/null | grep "HitRatio" | awk '{print $NF}')
         \"disk_write_avg\": \"$(echo "$total_disk_write / $total_iterations" | bc)\",
         \"net_rx_avg\": \"$(echo "$total_net_rx / $total_iterations" | bc)\",
         \"net_tx_avg\": \"$(echo "$total_net_tx / $total_iterations" | bc)\",
-        \"cache_hit_ratio\": \"$CACHE_HIT_RATIO\"
+        \"cache_hit_ratio\": \"$CACHE_HIT_RATIO\",
+        \"suggested_vcpus\": \"$SUGGESTED_VCPUS\",
+        \"suggested_network_throughput\": \"$SUGGESTED_NETWORK_THROUGHPUT\",
+        \"recommended_postgresql_extensions\": \"$RECOMMENDED_EXTENSIONS\"
     }" > "$OUTPUT_DIR/metrics_$TIMESTAMP.json"
 
-    # ================== OUTPUT TO XML & CSV ==================
-    echo "$TIMESTAMP,$(echo "$total_cpu / $total_iterations" | bc),$(echo "$total_memory / $total_iterations" | bc),$(echo "$total_disk_read / $total_iterations" | bc),$(echo "$total_disk_write / $total_iterations" | bc),$(echo "$total_net_rx / $total_iterations" | bc),$(echo "$total_net_tx / $total_iterations" | bc),$CACHE_HIT_RATIO" \
-        >> "$OUTPUT_DIR/metrics_avg.csv"
-
-    # Pause for the defined interval before repeating
     sleep "$INTERVAL"
 done
