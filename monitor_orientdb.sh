@@ -52,7 +52,7 @@ check_command iostat
 check_command vmstat
 check_command sar
 check_command iotop
-check_command jmxterm
+# check_command jmxterm
 check_command awk
 check_command bc
 
@@ -96,13 +96,13 @@ while [ $SECONDS -lt $END_TIME ]; do
     total_iterations=$((total_iterations + 1))
 
     # ================== ORIENTDB CACHE HIT RATIO VIA JMX ==================
-    CACHE_HIT_RATIO="N/A"
-    JMX_STATS=$(echo "open $JMX_HOST:$JMX_PORT
-get com.orientechnologies.orient.server:type=OSharedContextCache HitRatio
-quit" | jmxterm 2>/dev/null | grep "HitRatio" | awk '{print $NF}')
-    if [[ "$JMX_STATS" =~ ^[0-9.]+$ ]]; then
-        CACHE_HIT_RATIO="$JMX_STATS"
-    fi
+#     CACHE_HIT_RATIO="N/A"
+#     JMX_STATS=$(echo "open $JMX_HOST:$JMX_PORT
+# get com.orientechnologies.orient.server:type=OSharedContextCache HitRatio
+# quit" | jmxterm 2>/dev/null | grep "HitRatio" | awk '{print $NF}')
+#     if [[ "$JMX_STATS" =~ ^[0-9.]+$ ]]; then
+#         CACHE_HIT_RATIO="$JMX_STATS"
+#     fi
 
     # ================== AZURE POSTGRESQL SUGGESTED VALUES ==================
     SUGGESTED_VCPUS="$(echo "scale=0; ($total_cpu / $total_iterations) / 25 + 1" | bc)vCPUs"
