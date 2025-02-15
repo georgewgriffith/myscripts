@@ -1,0 +1,104 @@
+variables:
+  REMOTE_USER: "jmeter"
+  REMOTE_PATH: "/opt/scripts"
+  SSH_OPTS: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+# Define reusable commands
+.ssh_commands: &ssh_commands |
+  sshpass -p "${REMOTE_PASS}" ssh ${SSH_OPTS} ${REMOTE_USER}@${REMOTE_HOST}
+
+.scp_commands: &scp_commands |
+  sshpass -p "${REMOTE_PASS}" scp ${SSH_OPTS}
+
+stages:
+  - validate
+  - get-tf-outputs
+  - deploy
+  - execute
+
+validate_scripts:
+  stage: validate
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  script:
+    - shellcheck *.sh
+    - for sql in *.sql; do psql --syntax-check "$sql"; done
+  rules:
+    - changes:
+      - "*.sh"
+      - "*.sql"
+
+get_terraform_outputs:
+  stage: get-tf-outputs
+  script:
+    - |
+      echo "Getting Terraform outputs..."
+      echo "export TF_OUTPUT_db_host=$(terraform output -raw db_host)" >> tf_outputs.env
+      echo "export TF_OUTPUT_db_port=$(terraform output -raw db_port)" >> tf_outputs.env
+      echo "export TF_OUTPUT_vmss_name=$(terraform output -raw vmss_name)" >> tf_outputs.env
+      echo "export TF_OUTPUT_environment=$(terraform output -raw environment)" >> tf_outputs.env
+      echo "export TF_OUTPUT_controller_ips=$(terraform output -raw controller_ips)" >> tf_outputs.env
+      echo "export TF_OUTPUT_jmeter_rmi_port=$(terraform output -raw jmeter_rmi_port)" >> tf_outputs.env
+      echo "export TF_OUTPUT_jmeter_server_port=$(terraform output -raw jmeter_server_port)" >> tf_outputs.env
+  artifacts:
+    reports:
+      dotenv: tf_outputs.env
+
+create_remote_directory:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  before_script:
+    - apt-get update && apt-get install -y sshpass
+  script:
+    - *ssh_commands "sudo mkdir -p ${REMOTE_PATH} && sudo chown ${REMOTE_USER}:${REMOTE_USER} ${REMOTE_PATH}"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+copy_scripts:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  before_script:
+    - apt-get update && apt-get install -y sshpass
+  script:
+    - *scp_commands ./*.sh ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+    - *scp_commands ./*.sql ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+    - *ssh_commands "chmod +x ${REMOTE_PATH}/*.sh"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+execute_bootstrap:
+  stage: execute
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  before_script:
+    - apt-get update && apt-get install -y sshpass
+  script:
+    - |
+      *ssh_commands "cd ${REMOTE_PATH} && sudo ./rhel8-jmeter-bootstrap.sh \
+        DB_HOST='${TF_OUTPUT_db_host}' \
+        DB_PORT='${TF_OUTPUT_db_port}' \
+        DB_PASSWORD='${TF_VAR_DB_PASSWORD}' \
+        VMSS_NAME='${TF_OUTPUT_vmss_name}' \
+        ENVIRONMENT='${TF_OUTPUT_environment}' \
+        TEST_TARGET_HOST='${TF_VAR_TEST_TARGET_HOST}' \
+        CONTROLLER_IPS='${TF_OUTPUT_controller_ips}' \
+        JMETER_RMI_PORT='${TF_OUTPUT_jmeter_rmi_port}' \
+        JMETER_SERVER_PORT='${TF_OUTPUT_jmeter_server_port}'"
+  needs:
+    - get_terraform_outputs
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  environment:
+    name: production
+  variables:
+    GIT_STRATEGY: none
+
+cleanup_remote:
+  stage: .post
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  before_script:
+    - apt-get update && apt-get install -y sshpass
+  script:
+    - *ssh_commands "rm -f ${REMOTE_PATH}/*.sh ${REMOTE_PATH}/*.sql"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: always
