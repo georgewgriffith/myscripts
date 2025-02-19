@@ -1,8 +1,13 @@
 \set ECHO none 
-\set ON_ERROR_STOP on 
-\timing on 
-\connect jmeter 
-\set ON_ERROR_STOP on 
+\set ON_ERROR_STOP on
+\timing on
+
+-- Check if database exists
+SELECT 'CREATE DATABASE jmeter'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'jmeter');
+
+\connect jmeter
+
 SET client_min_messages TO WARNING;
 BEGIN;
 
@@ -137,7 +142,7 @@ CREATE TABLE jmeter_results (
     PRIMARY KEY(timestamp, id)
 ) PARTITION BY RANGE(timestamp);
 
-DROP TABLE IF NOT EXISTS jmeter_errors CASCADE;
+DROP TABLE IF EXISTS jmeter_errors CASCADE;
 CREATE TABLE jmeter_errors (
     id BIGSERIAL,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
