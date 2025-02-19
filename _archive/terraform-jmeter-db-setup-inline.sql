@@ -622,10 +622,107 @@ CREATE TABLE IF NOT EXISTS jmeter_header_configs (
     enabled BOOLEAN DEFAULT true
 );
 
+-- Add support for Constant Throughput Timer data
+CREATE TABLE IF NOT EXISTS jmeter_throughput_timer (
+    id BIGSERIAL PRIMARY KEY,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    thread_group VARCHAR(255) NOT NULL,
+    target_throughput NUMERIC(10,2),
+    actual_throughput NUMERIC(10,2),
+    delay_adjustment INTEGER,
+    calculated_pause_time INTEGER
+);
+
+-- Add support for BeanShell/JSR223 Pre/Post Processor variables
+CREATE TABLE IF NOT EXISTS jmeter_script_variables (
+    id BIGSERIAL PRIMARY KEY,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    processor_type VARCHAR(50) NOT NULL,
+    script_type VARCHAR(50) NOT NULL,
+    variable_name VARCHAR(255) NOT NULL,
+    variable_value TEXT,
+    script_name VARCHAR(255)
+);
+
+-- Add support for HTTP URL Rewriting Modifier
+CREATE TABLE IF NOT EXISTS jmeter_url_rewriting (
+    id BIGSERIAL PRIMARY KEY,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    sample_label VARCHAR(255) NOT NULL,
+    parameter_name VARCHAR(255) NOT NULL,
+    path_extension BOOLEAN,
+    path_extension_no_equals BOOLEAN,
+    cache_value BOOLEAN
+);
+
+-- Add support for JMeter property function calls
+CREATE TABLE IF NOT EXISTS jmeter_property_functions (
+    id BIGSERIAL PRIMARY KEY,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    function_name VARCHAR(255) NOT NULL,
+    property_name VARCHAR(255) NOT NULL,
+    default_value TEXT,
+    resolved_value TEXT,
+    thread_name VARCHAR(255)
+);
+
+-- Add support for JMeter Random Controller execution paths
+CREATE TABLE IF NOT EXISTS jmeter_random_controller (
+    id BIGSERIAL PRIMARY KEY,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    controller_name VARCHAR(255) NOT NULL,
+    num_children INTEGER,
+    selected_child INTEGER,
+    thread_name VARCHAR(255)
+);
+
+-- Add support for Target Rate Controller metrics
+CREATE TABLE IF NOT EXISTS jmeter_target_rate_metrics (
+    id BIGSERIAL PRIMARY KEY,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    controller_name VARCHAR(255) NOT NULL,
+    target_rate NUMERIC(10,2),
+    actual_rate NUMERIC(10,2),
+    period INTEGER,
+    thread_name VARCHAR(255)
+);
+
 -- Add indices for new tables
 CREATE INDEX IF NOT EXISTS idx_variable_interpolations_test ON jmeter_variable_interpolations(test_run_id);
 CREATE INDEX IF NOT EXISTS idx_dns_resolver_config_test ON jmeter_dns_resolver_config(test_run_id);
 CREATE INDEX IF NOT EXISTS idx_header_configs_name ON jmeter_header_configs(header_name);
+CREATE INDEX IF NOT EXISTS idx_throughput_timer_test ON jmeter_throughput_timer(test_run_id);
+CREATE INDEX IF NOT EXISTS idx_script_variables_test ON jmeter_script_variables(test_run_id);
+CREATE INDEX IF NOT EXISTS idx_url_rewriting_test ON jmeter_url_rewriting(test_run_id);
+CREATE INDEX IF NOT EXISTS idx_property_functions_name ON jmeter_property_functions(function_name);
+CREATE INDEX IF NOT EXISTS idx_random_controller_name ON jmeter_random_controller(controller_name);
+CREATE INDEX IF NOT EXISTS idx_target_rate_metrics_test ON jmeter_target_rate_metrics(test_run_id);
+
+-- Add view for comprehensive script variable analysis
+CREATE OR REPLACE VIEW vw_script_variable_analysis AS
+WITH var_stats AS (
+    SELECT 
+        test_run_id,
+        processor_type,
+        script_type,
+        COUNT(DISTINCT variable_name) as unique_vars,
+        COUNT(*) as total_modifications
+    FROM jmeter_script_variables
+    GROUP BY test_run_id, processor_type, script_type
+)
+SELECT 
+    vs.*,
+    tr.test_name,
+    tr.environment,
+    tr.start_time
+FROM var_stats vs
+JOIN test_runs tr ON tr.id = vs.test_run_id;
 
 -- Grant permissions for new objects
 DO $$
@@ -633,5 +730,53 @@ BEGIN
     GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO __JMETER_DB_USER__;
     GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO __GRAFANA_DB_USER__;
 END$$;
+
+CREATE OR REPLACE FUNCTION maintain_partitions() 
+RETURNS void AS $$
+DECLARE 
+    tables TEXT[] := ARRAY[
+        'system_metrics',
+        'jmeter_results',
+        'jmeter_errors',
+        'jmeter_responses',
+        'variables_history',
+        'jmeter_custom_metrics',
+        'jmeter_jdbc_requests',
+        'jmeter_transactions',
+        'jmeter_websocket_metrics',
+        'jmeter_soap_requests',
+        'jmeter_jms_messages',
+        'jmeter_http2_metrics',
+        'jmeter_assertions_detail',
+        'jmeter_target_rate_metrics',
+        'jmeter_property_functions',
+        'jmeter_random_controller',
+        'jmeter_throughput_timer',
+        'jmeter_script_variables',
+        'jmeter_url_rewriting'
+    ];
+    sd DATE := DATE_TRUNC('month', CURRENT_DATE);
+    pd DATE;
+    pn TEXT;
+BEGIN
+    FOREACH table_name IN ARRAY tables LOOP
+        FOR i IN 0..11 LOOP
+            pd := sd + (i * INTERVAL '1 month');
+            pn := table_name || '_' || TO_CHAR(pd, 'YYYY_MM');
+            EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %I PARTITION OF %I FOR VALUES FROM (%L) TO (%L)',
+                pn, table_name, pd, pd + INTERVAL '1 month');
+            
+            -- Create appropriate indices based on table type
+            IF table_name = 'system_metrics' THEN
+                EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %I(timestamp DESC)', pn, pn);
+            ELSE
+                -- For JMeter related tables that have test_run_id
+                EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_test_run ON %I(test_run_id)', pn, pn);
+                EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %I(timestamp DESC)', pn, pn);
+            END IF;
+        END LOOP;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 
 COMMIT;
