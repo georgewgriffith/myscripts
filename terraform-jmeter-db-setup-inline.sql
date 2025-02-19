@@ -113,7 +113,11 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT create_standard_jmeter_table('jmeter_results', '
+DROP TABLE IF EXISTS jmeter_results CASCADE;
+CREATE TABLE jmeter_results (
+    id BIGSERIAL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
     test_name VARCHAR(255) NOT NULL,
     thread_group VARCHAR(255) NOT NULL,
     sample_label VARCHAR(255) NOT NULL,
@@ -129,19 +133,22 @@ SELECT create_standard_jmeter_table('jmeter_results', '
     thread_name VARCHAR(255),
     data_type VARCHAR(50),
     hostname VARCHAR(255) NOT NULL,
-    environment VARCHAR(50) NOT NULL
-');
+    environment VARCHAR(50) NOT NULL,
+    PRIMARY KEY(timestamp, id)
+) PARTITION BY RANGE(timestamp);
 
-ALTER TABLE jmeter_results SET PARTITION BY RANGE(timestamp);
-
-SELECT create_standard_jmeter_table('jmeter_errors', '
+DROP TABLE IF NOT EXISTS jmeter_errors CASCADE;
+CREATE TABLE jmeter_errors (
+    id BIGSERIAL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
     sample_label VARCHAR(255) NOT NULL,
     error_message TEXT,
     response_code VARCHAR(10),
     thread_name VARCHAR(255),
-    stack_trace TEXT
-');
-ALTER TABLE jmeter_errors SET PARTITION BY RANGE(timestamp);
+    stack_trace TEXT,
+    PRIMARY KEY(timestamp, id)
+) PARTITION BY RANGE(timestamp);
 
 SELECT create_standard_indices('jmeter_results');
 SELECT create_standard_indices('jmeter_errors');
