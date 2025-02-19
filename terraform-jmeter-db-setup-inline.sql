@@ -118,7 +118,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TABLE IF EXISTS jmeter_results CASCADE;
+DROP TABLE IF NOT EXISTS jmeter_results CASCADE;
 CREATE TABLE jmeter_results (
     id BIGSERIAL,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -142,7 +142,7 @@ CREATE TABLE jmeter_results (
     PRIMARY KEY(timestamp, id)
 ) PARTITION BY RANGE(timestamp);
 
-DROP TABLE IF EXISTS jmeter_errors CASCADE;
+DROP TABLE IF NOT EXISTS jmeter_errors CASCADE;
 CREATE TABLE jmeter_errors (
     id BIGSERIAL,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -616,13 +616,21 @@ DECLARE
 BEGIN 
     fd := DATE_TRUNC('month', CURRENT_DATE + INTERVAL '2 months');
     
-    FOR tbl IN 
-        SELECT unnest(ARRAY[
-            'jmeter_results', 'system_metrics', 'jmeter_responses', 'jmeter_errors', 
-            'jmeter_jdbc_requests', 'jmeter_websocket_metrics', 'jmeter_soap_requests', 
-            'jmeter_jms_messages', 'jmeter_http2_metrics', 'jmeter_assertions_detail', 
-            'variables_history', 'backend_metrics', 'jmeter_plugin_metrics'
-        ])
+    FOR tbl IN SELECT unnest(ARRAY[
+        'jmeter_results'::text, 
+        'system_metrics'::text, 
+        'jmeter_responses'::text, 
+        'jmeter_errors'::text, 
+        'jmeter_jdbc_requests'::text, 
+        'jmeter_websocket_metrics'::text, 
+        'jmeter_soap_requests'::text, 
+        'jmeter_jms_messages'::text, 
+        'jmeter_http2_metrics'::text, 
+        'jmeter_assertions_detail'::text, 
+        'variables_history'::text, 
+        'backend_metrics'::text, 
+        'jmeter_plugin_metrics'::text
+    ])
     LOOP
         -- Check if table has test_run_id column
         has_test_run_id := tbl != 'system_metrics';
@@ -774,6 +782,7 @@ ORDER BY error_count DESC;
 
 CREATE OR REPLACE VIEW vw_transaction_hierarchy AS
 WITH RECURSIVE transaction_tree AS (
+    -- Base case
     SELECT 
         id,
         test_run_id,
@@ -782,10 +791,13 @@ WITH RECURSIVE transaction_tree AS (
         duration,
         success,
         1 as level,
-        ARRAY[transaction_name] as path
+        ARRAY[transaction_name::text] as path  -- Cast to text explicitly
     FROM jmeter_transactions
     WHERE parent_transaction IS NULL
+    
     UNION ALL
+    
+    -- Recursive case
     SELECT 
         t.id,
         t.test_run_id,
@@ -794,7 +806,7 @@ WITH RECURSIVE transaction_tree AS (
         t.duration,
         t.success,
         tt.level + 1,
-        tt.path || t.transaction_name
+        tt.path || t.transaction_name::text    -- Cast to text explicitly
     FROM jmeter_transactions t
     JOIN transaction_tree tt ON t.parent_transaction = tt.transaction_name
     AND t.test_run_id = tt.test_run_id
@@ -816,7 +828,7 @@ WITH RECURSIVE transaction_path AS (
         t.parent_transaction,
         t.duration,
         t.timestamp,
-        ARRAY[t.transaction_name] as path,
+        ARRAY[t.transaction_name::text] as path,  -- Cast to text
         t.duration as total_time,
         1 as depth
     FROM jmeter_transactions t
@@ -829,7 +841,7 @@ WITH RECURSIVE transaction_path AS (
         c.parent_transaction,
         c.duration,
         c.timestamp,
-        p.path || c.transaction_name,
+        p.path || c.transaction_name::text,  -- Cast to text
         p.total_time + c.duration,
         p.depth + 1
     FROM jmeter_transactions c
