@@ -569,8 +569,15 @@ BEGIN
             pn := table_name || '_' || TO_CHAR(pd, 'YYYY_MM');
             EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %I PARTITION OF %I FOR VALUES FROM (%L) TO (%L)',
                 pn, table_name, pd, pd + INTERVAL '1 month');
-            EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_test_run ON %I(test_run_id)', pn, pn);
-            EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %I(timestamp DESC)', pn, pn);
+            
+            -- Create appropriate indices based on table type
+            IF table_name = 'system_metrics' THEN
+                EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %I(timestamp DESC)', pn, pn);
+            ELSE
+                -- For JMeter related tables that have test_run_id
+                EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_test_run ON %I(test_run_id)', pn, pn);
+                EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %I(timestamp DESC)', pn, pn);
+            END IF;
         END LOOP;
     END LOOP;
 END;
@@ -599,17 +606,33 @@ DECLARE
     pn TEXT;
     error_count INT := 0;
     error_message TEXT;
-    tables TEXT[] := ARRAY['jmeter_results', 'system_metrics', 'jmeter_responses', 'jmeter_errors', 
-                          'jmeter_jdbc_requests', 'jmeter_websocket_metrics', 'jmeter_soap_requests', 
-                          'jmeter_jms_messages', 'jmeter_http2_metrics', 'jmeter_assertions_detail', 'variables_history', 'backend_metrics', 'jmeter_plugin_metrics'];
+    tbl TEXT;
+    has_test_run_id BOOLEAN;
 BEGIN 
     fd := DATE_TRUNC('month', CURRENT_DATE + INTERVAL '2 months');
-    FOREACH tbl IN ARRAY tables LOOP
+    
+    FOREACH tbl IN ARRAY ['jmeter_results', 'system_metrics', 'jmeter_responses', 'jmeter_errors', 
+                         'jmeter_jdbc_requests', 'jmeter_websocket_metrics', 'jmeter_soap_requests', 
+                         'jmeter_jms_messages', 'jmeter_http2_metrics', 'jmeter_assertions_detail', 
+                         'variables_history', 'backend_metrics', 'jmeter_plugin_metrics']
+    LOOP
+        -- Check if table has test_run_id column
+        has_test_run_id := tbl != 'system_metrics';
+        
         pn := tbl || '_' || TO_CHAR(fd, 'YYYY_MM');
+        
+        -- Create partition
         EXECUTE FORMAT('CREATE TABLE IF NOT EXISTS %I PARTITION OF %I FOR VALUES FROM (%L) TO (%L)', 
             pn, tbl, fd, fd + INTERVAL '1 month');
-        EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_test_run ON %I(test_run_id)', pn, pn);
+            
+        -- Create timestamp index for all tables
         EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %I(timestamp DESC)', pn, pn);
+        
+        -- Create test_run_id index only for tables that have it
+        IF has_test_run_id THEN
+            EXECUTE FORMAT('CREATE INDEX IF NOT EXISTS idx_%s_test_run ON %I(test_run_id)', pn, pn);
+        END IF;
+        
         -- Drop old partitions
         EXECUTE FORMAT('DROP TABLE IF EXISTS %s_%s', 
             tbl, TO_CHAR(CURRENT_DATE - INTERVAL '12 months', 'YYYY_MM'));
