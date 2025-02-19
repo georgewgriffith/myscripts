@@ -118,7 +118,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TABLE IF NOT EXISTS jmeter_results CASCADE;
+DROP TABLE IF EXISTS jmeter_results CASCADE;
 CREATE TABLE jmeter_results (
     id BIGSERIAL,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -142,7 +142,7 @@ CREATE TABLE jmeter_results (
     PRIMARY KEY(timestamp, id)
 ) PARTITION BY RANGE(timestamp);
 
-DROP TABLE IF NOT EXISTS jmeter_errors CASCADE;
+DROP TABLE IF EXISTS jmeter_errors CASCADE;
 CREATE TABLE jmeter_errors (
     id BIGSERIAL,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
