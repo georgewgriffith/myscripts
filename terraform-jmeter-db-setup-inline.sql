@@ -583,7 +583,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT create_monthly_partitions(ARRAY['jmeter_results', 'system_metrics', 'jmeter_responses', 'jmeter_errors']);
+SELECT create_monthly_partitions(ARRAY[
+    'jmeter_results'::text, 
+    'system_metrics'::text, 
+    'jmeter_responses'::text, 
+    'jmeter_errors'::text
+]);
 
 DO $$BEGIN
     IF 'jmeter_custom_metrics' = ANY(SELECT tablename FROM pg_tables) THEN
@@ -611,10 +616,13 @@ DECLARE
 BEGIN 
     fd := DATE_TRUNC('month', CURRENT_DATE + INTERVAL '2 months');
     
-    FOREACH tbl IN ARRAY ['jmeter_results', 'system_metrics', 'jmeter_responses', 'jmeter_errors', 
-                         'jmeter_jdbc_requests', 'jmeter_websocket_metrics', 'jmeter_soap_requests', 
-                         'jmeter_jms_messages', 'jmeter_http2_metrics', 'jmeter_assertions_detail', 
-                         'variables_history', 'backend_metrics', 'jmeter_plugin_metrics']
+    FOR tbl IN 
+        SELECT unnest(ARRAY[
+            'jmeter_results', 'system_metrics', 'jmeter_responses', 'jmeter_errors', 
+            'jmeter_jdbc_requests', 'jmeter_websocket_metrics', 'jmeter_soap_requests', 
+            'jmeter_jms_messages', 'jmeter_http2_metrics', 'jmeter_assertions_detail', 
+            'variables_history', 'backend_metrics', 'jmeter_plugin_metrics'
+        ])
     LOOP
         -- Check if table has test_run_id column
         has_test_run_id := tbl != 'system_metrics';
