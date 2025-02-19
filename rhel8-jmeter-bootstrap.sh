@@ -170,57 +170,68 @@ EOL
 configure_system() {
     log "Configuring system..."
     
-    # Configure Telegraf
-    cat > /etc/yum.repos.d/influxdb.repo << 'EOL'
-[influxdb]
-name = InfluxDB Repository
-baseurl = https://repos.influxdata.com/rhel/$releasever/$basearch/stable
-enabled = 1
-gpgcheck = 1
-gpgkey = https://repos.influxdata.com/influxdb.key
+    # Remove Telegraf configuration and replace with direct PostgreSQL metrics logging
+    cat > /opt/jmeter/metrics-collector.sh << 'EOL'
+#!/bin/bash
+
+collect_metrics() {
+    local HOSTNAME=$(hostname)
+    local TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S%z")
+    
+    # CPU metrics
+    local CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}')
+    
+    # Memory metrics
+    local MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+    local MEM_USED=$(free -m | awk '/^Mem:/{print $3}')
+    local MEM_FREE=$(free -m | awk '/^Mem:/{print $4}')
+    
+    # Disk metrics
+    local DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+    
+    # JMeter specific metrics
+    local THREAD_COUNT=$(ps aux | grep -c "[j]meter")
+    local TCP_CONN=$(ss -s | grep -o '[0-9]* TCP' | awk '{print $1}')
+    
+    # Insert metrics into PostgreSQL
+    PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U telegraf@"${DB_HOST}" -d metrics << EOF
+INSERT INTO metrics.system_metrics (timestamp, hostname, measurement, value, tags)
+VALUES 
+    ('${TIMESTAMP}', '${HOSTNAME}', 'cpu_usage', ${CPU_USAGE}, '{"type":"cpu","unit":"%"}'),
+    ('${TIMESTAMP}', '${HOSTNAME}', 'memory_total', ${MEM_TOTAL}, '{"type":"memory","unit":"MB"}'),
+    ('${TIMESTAMP}', '${HOSTNAME}', 'memory_used', ${MEM_USED}, '{"type":"memory","unit":"MB"}'),
+    ('${TIMESTAMP}', '${HOSTNAME}', 'memory_free', ${MEM_FREE}, '{"type":"memory","unit":"MB"}'),
+    ('${TIMESTAMP}', '${HOSTNAME}', 'disk_usage', ${DISK_USAGE}, '{"type":"disk","unit":"%"}'),
+    ('${TIMESTAMP}', '${HOSTNAME}', 'jmeter_threads', ${THREAD_COUNT}, '{"type":"jmeter","unit":"count"}'),
+    ('${TIMESTAMP}', '${HOSTNAME}', 'tcp_connections', ${TCP_CONN}, '{"type":"network","unit":"count"}');
+EOF
+}
+
+# Run metrics collection
+while true; do
+    collect_metrics
+    sleep 10
+done
 EOL
 
-    dnf install -y telegraf
+    chmod +x /opt/jmeter/metrics-collector.sh
 
-    # Configure PostgreSQL outputs for Telegraf
-    cat > /etc/telegraf/telegraf.conf << EOL
-[global_tags]
-  host = "${HOSTNAME}"
-  vmss = "${VMSS_NAME}"
-  environment = "${ENVIRONMENT}"
+    # Create systemd service for metrics collection
+    cat > /etc/systemd/system/metrics-collector.service << EOL
+[Unit]
+Description=JMeter Metrics Collector
+After=network.target postgresql.service
 
-[agent]
-  interval = "10s"
-  round_interval = true
-  metric_batch_size = 1000
-  metric_buffer_limit = 10000
-  collection_jitter = "0s"
-  flush_interval = "10s"
-  flush_jitter = "0s"
-  precision = ""
-  hostname = ""
-  omit_hostname = false
+[Service]
+Type=simple
+ExecStart=/opt/jmeter/metrics-collector.sh
+Environment="DB_HOST=${DB_HOST}"
+Environment="DB_PASSWORD=${DB_PASSWORD}"
+Restart=always
+RestartSec=10
 
-[[outputs.postgresql]]
-  connection = "host=${DB_HOST} user=telegraf@${DB_HOST} password=${DB_PASSWORD} dbname=metrics sslmode=verify-full"
-  schema = "metrics"
-  table = "system_metrics"
-  table_template = "CREATE TABLE IF NOT EXISTS {{ .table }} (time timestamp with time zone,hostname text,measurement text,value float8,tags jsonb)"
-  tag_template = "CREATE INDEX IF NOT EXISTS idx_{{ .table }}_tags ON {{ .table }} USING GIN(tags)"
-  time_template = "CREATE INDEX IF NOT EXISTS idx_{{ .table }}_time ON {{ .table }} (time DESC)"
-
-[[inputs.cpu]]
-[[inputs.disk]]
-[[inputs.diskio]]
-[[inputs.mem]]
-[[inputs.net]]
-[[inputs.system]]
-[[inputs.processes]]
-[[inputs.jmeter]]
-  interval = "10s"
-  jmeter_mode = "server"
-  port = 4445
-[[inputs.swap]]
+[Install]
+WantedBy=multi-user.target
 EOL
 
     # System optimizations
@@ -315,10 +326,10 @@ WantedBy=multi-user.target
 EOL
 
     systemctl daemon-reload
+    systemctl enable metrics-collector
+    systemctl start metrics-collector
     systemctl enable jmeter
     systemctl start jmeter
-    systemctl enable telegraf
-    systemctl start telegraf
 }
 
 health_check() {
@@ -327,7 +338,7 @@ health_check() {
     java -version >/dev/null 2>&1 || error "Java not responding"
     nc -z localhost ${JMETER_SERVER_PORT} || error "JMeter server port not listening"
     nc -z localhost ${JMETER_RMI_PORT} || error "JMeter RMI port not listening"
-    telegraf -test >/dev/null 2>&1 || warn "Telegraf test failed"
+    systemctl is-active metrics-collector >/dev/null 2>&1 || warn "Metrics collector not running"
 }
 
 setup_autorecovery() {
