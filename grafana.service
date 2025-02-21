@@ -1,0 +1,17 @@
+[Unit]
+Description=Grafana instance
+Documentation=http://docs.grafana.org
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=grafana
+Group=grafana
+Type=simple
+ExecStart=/opt/grafana/bin/grafana server --config=/opt/grafana/conf/custom.ini --homepath=/opt/grafana
+WorkingDirectory=/opt/grafana
+TimeoutStopSec=20
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
