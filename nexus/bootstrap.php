@@ -110,6 +110,3 @@ foreach ($required_extensions as $ext) {
 
 // Set up error handlers and logging
 setup_error_handling();
-
-// Initialize performance monitoring
-$GLOBALS['performance_metrics'] = start_monitoring();
