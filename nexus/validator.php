@@ -55,3 +55,28 @@ function validate_repository(array $data, string $type, string $format): void {
         }
     }
 }
+
+function validate_settings(array $settings): void {
+    $required = ['logLevel', 'timezone', 'retention'];
+    foreach ($required as $field) {
+        if (!isset($settings[$field])) {
+            throw new ConfigurationException("Missing required settings: $field");
+        }
+    }
+    
+    // Validate log level
+    $validLogLevels = ['debug', 'info', 'warning', 'error'];
+    if (!in_array(strtolower($settings['logLevel']), $validLogLevels)) {
+        throw new ConfigurationException("Invalid log level. Must be one of: " . implode(', ', $validLogLevels));
+    }
+    
+    // Validate timezone
+    if (!in_array($settings['timezone'], DateTimeZone::listIdentifiers())) {
+        throw new ConfigurationException("Invalid timezone specified");
+    }
+    
+    // Validate retention period (in days)
+    if (!is_int($settings['retention']) || $settings['retention'] < 1) {
+        throw new ConfigurationException("Retention period must be a positive integer");
+    }
+}
