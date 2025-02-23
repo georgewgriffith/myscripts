@@ -1,14 +1,83 @@
 <?php
 
-// Global configuration for logging
-$GLOBALS['debug_mode'] = false;  // Controls verbose debug output
-$GLOBALS['log_file'] = null;     // Path to log file
+/**
+ * Nexus Migration Utility Functions
+ * 
+ * Functions:
+ * 
+ * Logging Functions:
+ * - init_logging(): Initializes logging system with file and debug settings
+ * - write_log(): Writes timestamped messages to log file and console
+ * - log_debug(): Logs debug messages when debug mode is enabled
+ * - log_info(): Logs informational messages
+ * - log_error(): Logs error messages with optional exception details
+ * - log_warning(): Logs warning messages
+ * 
+ * API Functions:
+ * - validate_api_response(): Validates API responses for errors
+ * - make_api_request(): Makes HTTP requests to Nexus3 API
+ * 
+ * Entity Creation:
+ * - create_privilege(): Creates privileges in Nexus3
+ * - create_repository(): Creates repositories of any type
+ * - create_role(): Creates roles with privilege mappings
+ * - create_user(): Creates users with role assignments
+ * 
+ * Repository Management:
+ * - get_repository_config(): Generates format-specific repository configs
+ * - create_hosted_repository(): Creates hosted repositories
+ * - create_proxy_repository(): Creates proxy repositories
+ * - create_group_repository(): Creates group repositories
+ * 
+ * Validation:
+ * - validate_required_fields(): Checks for required data fields
+ * - validate_repository_config(): Validates repository configuration
+ * - validate_api_version(): Checks Nexus3 version compatibility
+ * - validate_repository_format(): Validates repository format support
+ * 
+ * Data Preparation:
+ * - clean_string(): Sanitizes string inputs
+ * - parse_csv_string(): Parses comma-separated values
+ * - sanitize_data(): Cleanses input data arrays
+ * - prepare_repository_data(): Prepares repository creation data
+ * - prepare_user_data(): Prepares user creation data
+ * 
+ * Migration:
+ * - migrate_item(): Handles migration of individual items
+ * - cleanup(): Performs cleanup operations
+ * - setup_error_handling(): Configures error handlers
+ */
 
 /**
- * Initialize the logging system
- * @param string $log_file Path to the log file
- * @param bool $debug_mode Enable verbose debug logging
+ * Utility Functions
+ * 
+ * Core functionality for the Nexus2 to Nexus3 migration process.
+ * Provides functions for:
+ * - Logging and error handling
+ * - API communication
+ * - Data validation and sanitization
+ * - Repository management
+ * - User and role management
+ * - Migration helpers
+ * 
+ * Functions are grouped by purpose:
+ * - Logging functions (log_*, write_log)
+ * - API functions (make_api_request, validate_api_response)
+ * - Creation functions (create_*)
+ * - Validation functions (validate_*)
+ * - Helper functions (clean_*, parse_*, prepare_*)
+ * - Migration functions (migrate_*)
  */
+
+// Global logging configuration
+$GLOBALS['debug_mode'] = false;
+$GLOBALS['log_file'] = null;
+
+/**
+ * Logging System Functions
+ * Handles all logging operations with different severity levels
+ */
+
 function init_logging($log_file, $debug_mode = false) {
     $GLOBALS['debug_mode'] = $debug_mode;
     $GLOBALS['log_file'] = $log_file;
@@ -53,16 +122,21 @@ function log_info($message) {
 }
 
 /**
- * Log an error message with optional exception details
+ * Log an error message with optional context
  * @param string $message Error message to log
- * @param Exception|null $exception Optional exception to include in log
+ * @param string|Exception|null $context Additional context or exception
+ * @return void
  */
-function log_error($message, $exception = null) {
+function log_error(string $message, string|Exception|null $context = null): void {
     $logMessage = "[ERROR] $message";
-    if ($exception) {
-        $logMessage .= "\nException: " . $exception->getMessage();
-        $logMessage .= "\nStack trace: " . $exception->getTraceAsString();
+    
+    if ($context instanceof Exception) {
+        $logMessage .= "\nException: " . $context->getMessage();
+        $logMessage .= "\nStack trace: " . $context->getTraceAsString();
+    } elseif (is_string($context) && !empty($context)) {
+        $logMessage .= "\nContext: " . $context;
     }
+    
     write_log($logMessage);
 }
 
@@ -75,12 +149,10 @@ function log_warning($message) {
 }
 
 /**
- * Validate API response for errors
- * @param mixed $response The API response to validate
- * @param string $context Description of the API call for error messages
- * @return mixed Validated response
- * @throws Exception if response is empty or contains errors
+ * API Communication Functions
+ * Handles all interactions with Nexus3 API
  */
+
 function validate_api_response($response, $context) {
     if (empty($response)) {
         log_error("Empty response received for $context");
@@ -110,11 +182,6 @@ function validate_api_response($response, $context) {
 function make_api_request($config, $method, $endpoint, $data = null) {
     $baseUrl = rtrim($config['nexus3']['baseUrl'], '/');
     $url = $baseUrl . '/service/rest/' . ltrim($endpoint, '/');
-    
-    log_debug("Making $method request to: $url");
-    if ($data) {
-        log_debug("Request data: " . json_encode($data, JSON_PRETTY_PRINT));
-    }
     
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -159,13 +226,23 @@ function make_api_request($config, $method, $endpoint, $data = null) {
 }
 
 /**
- * Create a privilege in Nexus3
- * @param array $config Configuration array
- * @param array $data Privilege data
- * @return array API response
+ * Creation Functions
+ * Functions for creating entities in Nexus3
  */
-function create_privilege($config, $data) {
-    return make_api_request($config, 'POST', 'v1/security/privileges/application', $data);
+
+/**
+ * Creates a privilege in Nexus 3
+ * @param array $config Configuration array
+ * @param array $privilegeData The privilege data to create
+ * @param string|null $description Optional description
+ * @return array API response
+ * @throws Exception When privilege creation fails
+ */
+function create_privilege(array $config, array $privilegeData, ?string $description = null): array {
+    if ($description) {
+        $privilegeData['description'] = $description;
+    }
+    return make_api_request($config, 'POST', 'v1/security/privileges/application', $privilegeData);
 }
 
 /**
@@ -176,7 +253,7 @@ function create_privilege($config, $data) {
  * @param array $data Repository configuration data
  * @return array API response
  */
-function create_repository($config, $type, $format, $data) {
+function create_repository(array $config, string $type, string $format, array $data): array {
     validate_repository_config($data, $type, $format);
     return make_api_request($config, 'POST', "v1/repositories/$format/$type", $data);
 }
@@ -202,13 +279,10 @@ function create_user($config, $data) {
 }
 
 /**
- * Get repository configuration based on format and type
- * Applies format-specific settings and validations
- * @param string $format Repository format
- * @param string $type Repository type
- * @param array $baseConfig Base configuration to extend
- * @return array Complete repository configuration
+ * Repository Configuration Functions
+ * Handles repository-specific configurations and validations
  */
+
 function get_repository_config($format, $type, $baseConfig) {
     $config = $baseConfig;
     
@@ -327,11 +401,10 @@ function create_group_repository($config, $format, $data) {
 }
 
 /**
- * Validate array data against required fields
- * @param array $data Data to validate
- * @param array $required Required field names
- * @throws InvalidArgumentException if validation fails
+ * Validation Functions
+ * Input validation and data integrity checks
  */
+
 function validate_required_fields(array $data, array $required): void {
     $missing = [];
     foreach ($required as $field) {
@@ -347,10 +420,63 @@ function validate_required_fields(array $data, array $required): void {
 }
 
 /**
- * Clean and normalize string values
- * @param string $value Value to clean
- * @return string Cleaned value
+ * Validate repository configuration
+ * @param array $data Repository configuration
+ * @param string $type Repository type
+ * @param string $format Repository format
+ * @throws InvalidArgumentException if validation fails
  */
+function validate_repository_config(array $data, string $type, string $format): void {
+    $required = ['name', 'online', 'storage'];
+    validate_required_fields($data, $required);
+
+    if (!in_array($type, ['hosted', 'proxy', 'group'])) {
+        throw new InvalidArgumentException("Invalid repository type: $type");
+    }
+
+    $supportedFormats = ['maven2', 'npm', 'nuget', 'docker', 'yum', 'pypi', 
+        'raw', 'rubygems', 'apt', 'helm', 'conan', 'p2', 'r', 'conda', 
+        'gitlfs', 'go'];
+
+    if (!in_array($format, $supportedFormats)) {
+        throw new InvalidArgumentException("Unsupported format: $format");
+    }
+}
+
+/**
+ * Validate API connectivity and version compatibility
+ * @throws RuntimeException if API is incompatible
+ */
+function validate_api_version(array $config): void {
+    $response = make_api_request($config, 'GET', 'v1/status');
+    if (!isset($response['version'])) {
+        throw new RuntimeException('Could not determine Nexus version');
+    }
+    
+    if (version_compare($response['version'], '3.0.0', '<')) {
+        throw new RuntimeException('Requires Nexus 3.0.0 or higher');
+    }
+}
+
+/**
+ * Validate repository format
+ * @param string $format Repository format
+ * @return bool True if format is supported, false otherwise
+ */
+function validate_repository_format(string $format): bool {
+    $supportedFormats = [
+        'maven2', 'npm', 'nuget', 'docker', 'yum', 'pypi',
+        'raw', 'rubygems', 'apt', 'helm', 'conan', 'p2',
+        'r', 'conda', 'gitlfs', 'go'
+    ];
+    return in_array(strtolower($format), $supportedFormats);
+}
+
+/**
+ * Data Preparation Functions
+ * Clean and format data for API requests
+ */
+
 function clean_string(string $value): string {
     return trim(strip_tags($value));
 }
@@ -368,6 +494,87 @@ function parse_csv_string(?string $value): array {
         array_map('trim', explode(',', $value)),
         function($v) { return !empty($v); }
     );
+}
+
+/**
+ * Clean and sanitize data for API requests
+ */
+function sanitize_data(array $data): array {
+    array_walk_recursive($data, function(&$value) {
+        if (is_string($value)) {
+            $value = trim(strip_tags($value));
+        }
+    });
+    return $data;
+}
+
+/**
+ * Prepare repository data for creation
+ */
+function prepare_repository_data(array $data): array {
+    return [
+        'name' => $data['name'],
+        'online' => $data['exposed'] === 't',
+        'storage' => [
+            'blobStoreName' => BLOB_STORE_NAME,
+            'strictContentTypeValidation' => true,
+            'writePolicy' => match($data['writepolicy']) {
+                'ALLOW_WRITE' => 'ALLOW',
+                'ALLOW_WRITE_ONCE' => 'ALLOW_ONCE',
+                default => 'DENY'
+            }
+        ]
+    ];
+}
+
+/**
+ * Prepare user data for creation
+ */
+function prepare_user_data(array $data): array {
+    return [
+        'userId' => $data['userid'],
+        'firstName' => $data['firstname'],
+        'lastName' => $data['lastname'],
+        'emailAddress' => $data['email'],
+        'password' => DEFAULT_PASSWORD,
+        'status' => match(strtolower($data['status'])) {
+            'active', 'enabled' => USER_STATUS_ACTIVE,
+            'disabled' => USER_STATUS_DISABLED,
+            'locked' => USER_STATUS_LOCKED,
+            default => USER_STATUS_DISABLED
+        },
+        'roles' => parse_csv_string($data['roles'])
+    ];
+}
+
+/**
+ * Migration Helper Functions
+ * Support functions for the migration process
+ */
+
+/**
+ * Migrate a single item based on type
+ * @param array $config Configuration array
+ * @param string $type Item type (privileges, repositories, roles, users)
+ * @param array $item Item data to migrate
+ * @return array API response
+ * @throws InvalidArgumentException for unknown types
+ */
+function migrate_item(array $config, string $type, array $item): array {
+    $item = sanitize_data($item);
+    
+    return match($type) {
+        'privileges' => create_privilege($config, $item),
+        'repositories' => create_repository(
+            $config,
+            $item['repotype'],
+            strtolower($item['format']),
+            prepare_repository_data($item)
+        ),
+        'roles' => create_role($config, $item),
+        'users' => create_user($config, prepare_user_data($item)),
+        default => throw new InvalidArgumentException("Unknown migration type: $type")
+    };
 }
 
 /**
@@ -405,25 +612,81 @@ function setup_error_handling(): void {
 }
 
 /**
- * Validate repository configuration
- * @param array $data Repository configuration
- * @param string $type Repository type
- * @param string $format Repository format
- * @throws InvalidArgumentException if validation fails
+ * Repository Type Configuration Functions
+ * Handle specific repository type configurations
  */
-function validate_repository_config(array $data, string $type, string $format): void {
-    $required = ['name', 'online', 'storage'];
-    validate_required_fields($data, $required);
 
-    if (!in_array($type, ['hosted', 'proxy', 'group'])) {
-        throw new InvalidArgumentException("Invalid repository type: $type");
-    }
+/**
+ * Get repository type configuration
+ * @param string $type Repository type
+ * @param array $data Repository data
+ * @return array Repository type configuration
+ * @throws InvalidArgumentException if repository type is invalid
+ */
+function get_repository_type_config(string $type, array $data): array {
+    return match($type) {
+        'hosted' => [
+            'storage' => [
+                'blobStoreName' => BLOB_STORE_NAME,
+                'strictContentTypeValidation' => true,
+                'writePolicy' => $data['writePolicy'] ?? 'DENY'
+            ]
+        ],
+        'proxy' => [
+            'storage' => [
+                'blobStoreName' => BLOB_STORE_NAME,
+                'strictContentTypeValidation' => true
+            ],
+            'proxy' => [
+                'remoteUrl' => $data['remoteUrl'],
+                'contentMaxAge' => $data['contentMaxAge'] ?? DEFAULT_CACHE_TTL,
+                'metadataMaxAge' => $data['metadataMaxAge'] ?? DEFAULT_CACHE_TTL
+            ],
+            'negativeCache' => [
+                'enabled' => true,
+                'timeToLive' => $data['negativeCacheTTL'] ?? DEFAULT_CACHE_TTL
+            ]
+        ],
+        'group' => [
+            'storage' => [
+                'blobStoreName' => BLOB_STORE_NAME,
+                'strictContentTypeValidation' => true
+            ],
+            'group' => [
+                'memberNames' => $data['memberNames'] ?? []
+            ]
+        ],
+        default => throw new InvalidArgumentException("Invalid repository type: $type")
+    };
+}
 
-    $supportedFormats = ['maven2', 'npm', 'nuget', 'docker', 'yum', 'pypi', 
-        'raw', 'rubygems', 'apt', 'helm', 'conan', 'p2', 'r', 'conda', 
-        'gitlfs', 'go'];
+/**
+ * Database Schema Validation Functions
+ * Ensure database structure meets requirements
+ */
 
-    if (!in_array($format, $supportedFormats)) {
-        throw new InvalidArgumentException("Unsupported format: $format");
+/**
+ * Validate database schema before migration
+ * @throws RuntimeException if schema is invalid
+ */
+function validate_database_schema(PDO $dbh): void {
+    $requiredTables = [
+        'migration_nexus2_privileges',
+        'migration_nexus2_repositories',
+        'migration_nexus2_roles',
+        'migration_nexus2_users'
+    ];
+
+    $foundTables = $dbh->query("
+        SELECT tablename 
+        FROM pg_catalog.pg_tables 
+        WHERE schemaname='public'
+    ")->fetchAll(PDO::FETCH_COLUMN);
+
+    $missingTables = array_diff($requiredTables, $foundTables);
+    if (!empty($missingTables)) {
+        throw new RuntimeException(
+            'Missing required tables: ' . implode(', ', $missingTables)
+        );
     }
 }
