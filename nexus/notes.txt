@@ -1,0 +1,82 @@
+SELECT p.uuid, p.id, p.resourceuri, p.name, p.description, p.type,
+    p.usermanaged, p.dateadded, p.dateupdated, p.properties_checksum, 
+    p.properties,
+    (
+        SELECT string_agg(DISTINCT elem->>'value', ',')
+        FROM jsonb_array_elements(p.properties) elem
+        WHERE elem->>'key' IN ('method', 'admin')
+    ) as methods,
+    (
+        SELECT string_agg(DISTINCT elem->>'value', ',')
+        FROM jsonb_array_elements(p.properties) elem
+        WHERE elem->>'key' IN (
+            'repositoryId', 'repositoryld',
+            'repositoryTargetId', 'repository TargetId', 'repositoryTargetid'
+        )
+        AND elem->>'value' != '*' 
+        AND elem->>'value' != ''
+    ) as repository_targets,
+    (
+        SELECT string_agg(DISTINCT elem->>'value', ',')
+        FROM jsonb_array_elements(p.properties) elem
+        WHERE elem->>'key' = 'permission'
+    ) as permissions,
+    (
+        SELECT string_agg(DISTINCT elem->>'value', ',')
+        FROM jsonb_array_elements(p.properties) elem
+        WHERE elem->>'key' = 'profile'
+    ) as profiles
+FROM public.migration_nexus2_privileges p
+
+
+
+
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    try {
+        // Parse methods from JSONB
+        $methods = [];
+        if (!empty($row['methods'])) {
+            $methodsArray = array_filter(explode(',', $row['methods']));
+            foreach ($methodsArray as $method) {
+                // Handle "create, read" format and trim spaces
+                $submethods = array_map('trim', explode(',', $method));
+                // Handle "*" as all methods
+                if (in_array('*', $submethods)) {
+                    $methods = ['CREATE', 'READ', 'UPDATE', 'DELETE'];
+                    break;
+                }
+                $methods = array_merge($methods, $submethods);
+            }
+        }
+        $methods = array_unique(array_filter($methods));
+
+        // Parse repository targets
+        $repositoryTargets = [];
+        if (!empty($row['repository_targets'])) {
+            $repositoryTargets = array_unique(
+                array_filter(
+                    explode(',', $row['repository_targets']),
+                    function($value) { 
+                        return !empty($value) && $value !== '*' && $value !== '""'; 
+                    }
+                )
+            );
+        }
+
+        // Parse permissions
+        $permissions = [];
+        if (!empty($row['permissions'])) {
+            $permissions = array_unique(
+                array_filter(explode(',', $row['permissions']))
+            );
+        }
+
+        // Parse profiles
+        $profiles = [];
+        if (!empty($row['profiles'])) {
+            $profiles = array_unique(
+                array_filter(explode(',', $row['profiles']))
+            );
+        }
+
+        // ... rest of the code remains the same ...

@@ -186,14 +186,15 @@ try {
                     throw new InvalidArgumentException("Privilege name cannot be empty");
                 }
 
-                $payload = [
-                    'name' => $row['name'],
-                    'description' => $row['description'] ?? $row['name'],
-                    'actions' => $actions,
-                    'domain' => $row['resourceuri'] ?? '*',
-                ];
-
-                create_privilege($config, $payload);
+                create_privilege(
+                    config: $config,
+                    privilegeData: [
+                        'name' => $row['name'],
+                        'description' => $row['description'] ?? $row['name'],
+                        'actions' => $actions,
+                        'domain' => $row['resourceuri'] ?? '*'
+                    ]
+                );
                 log_info("Created privilege: {$row['name']}");
                 $stats['privileges']['success']++;
             } catch (Exception $e) {
@@ -508,3 +509,15 @@ $dbh = null; // Close database connection
 if (file_exists($logFile)) {
     chmod($logFile, 0644); // Set appropriate permissions
 }
+
+/**
+ * Creates a privilege in Nexus 3
+ * @param array $config The configuration array
+ * @param array $privilegeData The privilege data to create
+ * @param string|null $description Optional description for the privilege
+ * @throws Exception When privilege creation fails
+ * @return void
+ */
+function create_privilege(array $config, array $privilegeData, ?string $description = null): void
+
+public function log_error(string $message, string|Exception $context = null): void

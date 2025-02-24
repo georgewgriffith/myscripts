@@ -238,41 +238,11 @@ function make_api_request($config, $method, $endpoint, $data = null) {
  * @return array API response
  * @throws Exception When privilege creation fails
  */
-function create_privilege(array $config, array $privilegeData): void {
-    if (empty($privilegeData['name'])) {
-        throw new ValidationException('Privilege name is required');
+function create_privilege(array $config, array $privilegeData, ?string $description = null): array {
+    if ($description) {
+        $privilegeData['description'] = $description;
     }
-
-    if (empty($privilegeData['actions']) || !is_array($privilegeData['actions'])) {
-        throw new ValidationException('Privilege actions must be a non-empty array');
-    }
-
-    $payload = [
-        'name' => $privilegeData['name'],
-        'description' => $privilegeData['description'] ?? $privilegeData['name'],
-        'actions' => $privilegeData['actions'],
-        'domain' => $privilegeData['domain'] ?? '*',
-        'type' => 'application'
-    ];
-
-    try {
-        make_api_request(
-            $config,
-            'POST',
-            'v1/security/privileges',
-            json_encode($payload)
-        );
-    } catch (Exception $e) {
-        if (strpos($e->getMessage(), '422') !== false) {
-            log_warning("Privilege {$privilegeData['name']} already exists, skipping");
-            return;
-        }
-        throw new MigrationException(
-            "Failed to create privilege {$privilegeData['name']}: " . $e->getMessage(),
-            0,
-            $e
-        );
-    }
+    return make_api_request($config, 'POST', 'v1/security/privileges/application', $privilegeData);
 }
 
 /**
