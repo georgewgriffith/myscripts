@@ -159,7 +159,6 @@ try {
                                     case 'DELETE':
                                         if (!in_array('DELETE', $actions)) $actions[] = 'DELETE';
                                         break;
-                                    // Missing default case for unknown methods
                                     default:
                                         log_warning("Unknown method type: " . $method);
                                         break;
@@ -171,6 +170,15 @@ try {
                     case 'application':
                         // Map application privileges directly
                         $actions = isset($properties['method']) ? [$properties['method']] : ['READ'];
+                        break;
+
+                    case 'method':
+                        // Map method privileges directly from the methods array
+                        if (!empty($methods)) {
+                            $actions = array_map('strtoupper', $methods);
+                        } else {
+                            $actions = ['READ'];
+                        }
                         break;
 
                     default:
