@@ -38,8 +38,9 @@ BEGIN
             testPlanDate VARCHAR NOT NULL,      -- Date of test plan execution
             testPlanDescription VARCHAR,        -- Description of the test plan
             timeStamp BIGINT NOT NULL CHECK (timeStamp > 0 AND timeStamp < 253402300799999),  -- Validates timestamps until year 9999
+            epoch_seconds BIGINT GENERATED ALWAYS AS (timeStamp / 1000) STORED,  -- Partition key
             timestamp_date TIMESTAMP GENERATED ALWAYS AS 
-                (to_timestamp(LEAST(timeStamp / 1000.0, 253402300799.999))) STORED,  -- Prevent overflow
+                (to_timestamp(epoch_seconds)) STORED,  -- Use epoch_seconds for consistency
             elapsed INTEGER NOT NULL,   -- Response time in milliseconds
             label TEXT NOT NULL,        -- Sampler label
             responseCode VARCHAR(10) NOT NULL, -- HTTP response code (e.g., 200, 404)
@@ -56,18 +57,18 @@ BEGIN
             idleTime INTEGER NOT NULL CHECK (idleTime >= 0),     -- Time the thread was idle
             connect INTEGER NOT NULL CHECK (connect >= 0),       -- Time taken to establish connection
             created_at TIMESTAMP DEFAULT NOW()  -- Timestamp when row was inserted
-        ) PARTITION BY RANGE (CAST((timeStamp / 1000) AS bigint));
+        ) PARTITION BY RANGE (epoch_seconds);
 
-        -- Add unique constraint that includes partition key
+        -- Add unique constraint using the computed column
         ALTER TABLE jmeter_results 
-            ADD CONSTRAINT jmeter_results_id_timestamp_key 
-            UNIQUE (id, CAST((timeStamp / 1000) AS bigint));
+            ADD CONSTRAINT jmeter_results_id_key 
+            UNIQUE (id, epoch_seconds);
         
-        -- Create default partition using epoch timestamps
+        -- Create default partition with simpler bounds
         CREATE TABLE jmeter_results_default 
             PARTITION OF jmeter_results 
             FOR VALUES FROM (MINVALUE) TO (
-                CAST(EXTRACT(EPOCH FROM CURRENT_DATE - INTERVAL '12 months') AS bigint)
+                EXTRACT(EPOCH FROM CURRENT_DATE - INTERVAL '12 months')
             );
             
         -- Set initial table parameters
@@ -86,6 +87,7 @@ BEGIN
         COMMENT ON COLUMN jmeter_results.elapsed IS 'Total time taken for the request in milliseconds';
         COMMENT ON COLUMN jmeter_results.latency IS 'Time to first byte in milliseconds';
         COMMENT ON COLUMN jmeter_results.timestamp_date IS 'Computed timestamp for partitioning';
+        COMMENT ON COLUMN jmeter_results.epoch_seconds IS 'Unix epoch seconds used for partitioning';
     END IF;
 END $$;
 
@@ -109,8 +111,8 @@ BEGIN
     
     WHILE start_date < end_date LOOP
         partition_name := 'jmeter_results_p' || to_char(start_date, 'YYYY_MM');
-        start_epoch := CAST(EXTRACT(EPOCH FROM start_date) AS bigint);
-        end_epoch := CAST(EXTRACT(EPOCH FROM (start_date + interval '1 month')) AS bigint);
+        start_epoch := EXTRACT(EPOCH FROM start_date);
+        end_epoch := EXTRACT(EPOCH FROM (start_date + interval '1 month'));
         
         -- Check if partition exists before creating
         IF NOT EXISTS (SELECT FROM pg_tables WHERE tablename = partition_name) THEN
@@ -122,10 +124,10 @@ BEGIN
                     end_epoch);
                     
                 -- Create Azure-optimized local indexes
-                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (CAST((timeStamp/1000) AS bigint)) USING BRIN',
+                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (epoch_seconds) USING BRIN',
                     'idx_' || partition_name || '_timestamp_brin', partition_name);
                 
-                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (label, timeStamp)',
+                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (label, epoch_seconds)',
                     'idx_' || partition_name || '_label', partition_name);
                 
                 partition_count := partition_count + 1;
@@ -169,7 +171,7 @@ BEGIN
     EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jmeter_testplan 
         ON jmeter_results(testPlanName, testPlanDate)';
     EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jmeter_response_code 
-        ON jmeter_results(responseCode, success, CAST((timeStamp/1000) AS bigint))';
+        ON jmeter_results(responseCode, success, epoch_seconds)';
 END $$;
 
 -- Validate structure without raising errors
