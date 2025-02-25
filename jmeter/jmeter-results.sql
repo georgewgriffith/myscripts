@@ -16,9 +16,13 @@ BEGIN
         RAISE EXCEPTION 'PostgreSQL 14 or higher is required';
     END IF;
 
-    -- Ensure user has necessary privileges
-    IF NOT pg_has_role(current_user, 'pg_create_table') THEN
-        RAISE EXCEPTION 'User % lacks required privileges', current_user;
+    -- Check if user has proper permissions
+    IF NOT (
+        pg_has_role(current_user, 'CREATE') OR 
+        has_database_privilege(current_database(), 'CREATE')
+    ) THEN
+        RAISE EXCEPTION 'User % lacks required CREATE privileges on database %', 
+            current_user, current_database();
     END IF;
 END $$;
 
