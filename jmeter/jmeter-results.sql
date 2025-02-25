@@ -56,13 +56,13 @@ BEGIN
             idleTime INTEGER NOT NULL CHECK (idleTime >= 0),     -- Time the thread was idle
             connect INTEGER NOT NULL CHECK (connect >= 0),       -- Time taken to establish connection
             created_at TIMESTAMP DEFAULT NOW()  -- Timestamp when row was inserted
-        ) PARTITION BY RANGE ((timeStamp / 1000)::bigint);
+        ) PARTITION BY RANGE (CAST((timeStamp / 1000) AS bigint));
         
         -- Create default partition using epoch timestamps
         CREATE TABLE jmeter_results_default 
             PARTITION OF jmeter_results 
             FOR VALUES FROM (MINVALUE) TO (
-                (EXTRACT(EPOCH FROM CURRENT_DATE - INTERVAL '12 months'))::bigint
+                CAST(EXTRACT(EPOCH FROM CURRENT_DATE - INTERVAL '12 months') AS bigint)
             );
             
         -- Set initial table parameters
@@ -104,8 +104,8 @@ BEGIN
     
     WHILE start_date < end_date LOOP
         partition_name := 'jmeter_results_p' || to_char(start_date, 'YYYY_MM');
-        start_epoch := EXTRACT(EPOCH FROM start_date)::bigint;
-        end_epoch := EXTRACT(EPOCH FROM (start_date + interval '1 month'))::bigint;
+        start_epoch := CAST(EXTRACT(EPOCH FROM start_date) AS bigint);
+        end_epoch := CAST(EXTRACT(EPOCH FROM (start_date + interval '1 month')) AS bigint);
         
         -- Check if partition exists before creating
         IF NOT EXISTS (SELECT FROM pg_tables WHERE tablename = partition_name) THEN
@@ -117,7 +117,7 @@ BEGIN
                     end_epoch);
                     
                 -- Create Azure-optimized local indexes
-                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I ((timeStamp/1000)) USING BRIN',
+                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (CAST((timeStamp/1000) AS bigint)) USING BRIN',
                     'idx_' || partition_name || '_timestamp_brin', partition_name);
                 
                 EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (label, timeStamp)',
@@ -164,7 +164,7 @@ BEGIN
     EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jmeter_testplan 
         ON jmeter_results(testPlanName, testPlanDate)';
     EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jmeter_response_code 
-        ON jmeter_results(responseCode, success, (timeStamp/1000))';
+        ON jmeter_results(responseCode, success, CAST((timeStamp/1000) AS bigint))';
 END $$;
 
 -- Validate structure without raising errors
