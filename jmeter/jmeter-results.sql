@@ -56,12 +56,14 @@ BEGIN
             idleTime INTEGER NOT NULL CHECK (idleTime >= 0),     -- Time the thread was idle
             connect INTEGER NOT NULL CHECK (connect >= 0),       -- Time taken to establish connection
             created_at TIMESTAMP DEFAULT NOW()  -- Timestamp when row was inserted
-        ) PARTITION BY RANGE (timestamp_date);
+        ) PARTITION BY RANGE ((timeStamp / 1000)::bigint);
         
-        -- Create default partition only if table was just created
+        -- Create default partition using epoch timestamps
         CREATE TABLE jmeter_results_default 
             PARTITION OF jmeter_results 
-            FOR VALUES FROM (MINVALUE) TO (CURRENT_DATE - INTERVAL '12 months');
+            FOR VALUES FROM (MINVALUE) TO (
+                (EXTRACT(EPOCH FROM CURRENT_DATE - INTERVAL '12 months'))::bigint
+            );
             
         -- Set initial table parameters
         ALTER TABLE jmeter_results SET (
@@ -88,6 +90,8 @@ DECLARE
     start_date TIMESTAMP;
     end_date TIMESTAMP;
     partition_name TEXT;
+    start_epoch BIGINT;
+    end_epoch BIGINT;
     partition_count INT := 0;
 BEGIN
     -- Validate date ranges
@@ -100,6 +104,8 @@ BEGIN
     
     WHILE start_date < end_date LOOP
         partition_name := 'jmeter_results_p' || to_char(start_date, 'YYYY_MM');
+        start_epoch := EXTRACT(EPOCH FROM start_date)::bigint;
+        end_epoch := EXTRACT(EPOCH FROM (start_date + interval '1 month'))::bigint;
         
         -- Check if partition exists before creating
         IF NOT EXISTS (SELECT FROM pg_tables WHERE tablename = partition_name) THEN
@@ -107,14 +113,14 @@ BEGIN
                 EXECUTE format('CREATE TABLE %I PARTITION OF jmeter_results
                     FOR VALUES FROM (%L) TO (%L)',
                     partition_name,
-                    start_date,
-                    start_date + interval '1 month');
+                    start_epoch,
+                    end_epoch);
                     
                 -- Create Azure-optimized local indexes
-                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I USING BRIN (timestamp_date)',
+                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I ((timeStamp/1000)) USING BRIN',
                     'idx_' || partition_name || '_timestamp_brin', partition_name);
                 
-                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (label, timestamp_date)',
+                EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (label, timeStamp)',
                     'idx_' || partition_name || '_label', partition_name);
                 
                 partition_count := partition_count + 1;
@@ -158,7 +164,7 @@ BEGIN
     EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jmeter_testplan 
         ON jmeter_results(testPlanName, testPlanDate)';
     EXECUTE 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jmeter_response_code 
-        ON jmeter_results(responseCode, success, timestamp_date)';
+        ON jmeter_results(responseCode, success, (timeStamp/1000))';
 END $$;
 
 -- Validate structure without raising errors
