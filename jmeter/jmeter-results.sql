@@ -33,7 +33,7 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_tables WHERE tablename = 'jmeter_results') THEN
         CREATE TABLE jmeter_results (
-            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            id INTEGER GENERATED ALWAYS AS IDENTITY,  -- Removed PRIMARY KEY
             testPlanName VARCHAR NOT NULL,      -- Name of the test plan
             testPlanDate VARCHAR NOT NULL,      -- Date of test plan execution
             testPlanDescription VARCHAR,        -- Description of the test plan
@@ -57,6 +57,11 @@ BEGIN
             connect INTEGER NOT NULL CHECK (connect >= 0),       -- Time taken to establish connection
             created_at TIMESTAMP DEFAULT NOW()  -- Timestamp when row was inserted
         ) PARTITION BY RANGE (CAST((timeStamp / 1000) AS bigint));
+
+        -- Add unique constraint that includes partition key
+        ALTER TABLE jmeter_results 
+            ADD CONSTRAINT jmeter_results_id_timestamp_key 
+            UNIQUE (id, CAST((timeStamp / 1000) AS bigint));
         
         -- Create default partition using epoch timestamps
         CREATE TABLE jmeter_results_default 
