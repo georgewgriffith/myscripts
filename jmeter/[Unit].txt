@@ -1,0 +1,15 @@
+[Unit]
+Description=JMeter Results Monitor Service
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=jmeter
+Group=jmeter
+EnvironmentFile=/etc/jmeter-monitor/config
+ExecStart=/usr/local/bin/jmeter-monitor.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
