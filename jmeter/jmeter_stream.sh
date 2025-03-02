@@ -57,12 +57,6 @@ update_status() {
     echo "$1" > "${STATUS_FILE}.tmp" && mv "${STATUS_FILE}.tmp" "$STATUS_FILE"
 }
 
-# PostgreSQL Credentials
-DB_NAME="your_db"
-DB_USER="your_user"
-DB_HOST="localhost"
-JTL_FILE="/path/to/results.jtl"
-
 # Capture Environment Variables
 ENVIRONMENT=${ENVIRONMENT:=Unknown}  # POSIX-compliant parameter expansion
 TEST_RUN_ID=${TEST_RUN_ID:=$(date +%Y%m%d%H%M%S)}  # More compatible date format
@@ -168,13 +162,15 @@ trap 'rm -f $TEMP_CSV $POSITION_FILE' EXIT
 
 # Function to read chunks efficiently
 read_chunk() {
-    local last_pos=$(cat "$POSITION_FILE")
-    local current_size=$(stat -c %s "$JTL_FILE" 2>/dev/null || echo "$last_pos")
+    local jtl_file="$1"
+    local position_file="$2"
+    local last_pos=$(cat "$position_file")
+    local current_size=$(stat -c %s "$jtl_file" 2>/dev/null || echo "$last_pos")
     local chunk_size=$((1024 * 64))  # 64KB chunks
     
     if [ "$current_size" -gt "$last_pos" ]; then
-        dd if="$JTL_FILE" bs=1 skip="$last_pos" count=$((current_size - last_pos)) 2>/dev/null
-        echo "$current_size" > "$POSITION_FILE"
+        dd if="$jtl_file" bs=1 skip="$last_pos" count=$((current_size - last_pos)) 2>/dev/null
+        echo "$current_size" > "$position_file"
     fi
 }
 
@@ -202,6 +198,87 @@ manage_background_process() {
     BG_PIDS+=($pid)
 }
 
+# PostgreSQL operations
+process_batch() {
+    local csv_file="$1"
+    local jtl_file="$2"
+    if [ -s "$csv_file" ]; then
+        if ! psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -c "\COPY jmeter_results FROM '$csv_file' WITH (FORMAT csv);" 2>/dev/null; then
+            echo "Error: Failed to copy data to PostgreSQL for $jtl_file"
+            check_postgres
+            return 1
+        fi
+        echo -n > "$csv_file"
+    fi
+}
+
+# Data processing pipeline
+process_data() {
+    local input="$1"
+    local test_run_id="$2"
+    awk -F',' -v env="$ENVIRONMENT" -v run_id="$test_run_id" '
+    BEGIN { OFS="," }
+    !/timeStamp/ && NF > 12 {
+        gsub("'\''", "'\'\''", $3);
+        gsub("'\''", "'\'\''", $5);
+        print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,env,run_id
+    }'
+}
+
+# File monitoring function
+monitor_file() {
+    local jtl_file="$1"
+    local test_run_id="$2"
+    local temp_csv="$3"
+    local record_count=0
+    local position_file="/tmp/jmeter_position_${test_run_id}"
+    
+    echo "0" > "$position_file"
+    
+    if [ "$USE_INOTIFY" -eq 1 ]; then
+        while inotifywait -q -e modify "$jtl_file" >/dev/null 2>&1; do
+            process_file_chunk "$jtl_file" "$test_run_id" "$temp_csv" "$position_file"
+            [ $? -ne 0 ] && break
+        done
+    else
+        while is_jmeter_running; do
+            process_file_chunk "$jtl_file" "$test_run_id" "$temp_csv" "$position_file"
+            [ $? -ne 0 ] && break
+            sleep 0.1
+        done
+    fi
+    
+    # Final batch
+    process_batch "$temp_csv" "$jtl_file"
+    rm -f "$position_file"
+}
+
+# Process file chunk
+process_file_chunk() {
+    local jtl_file="$1"
+    local test_run_id="$2"
+    local temp_csv="$3"
+    local position_file="$4"
+    local record_count=0
+    
+    read_chunk "$jtl_file" "$position_file" | \
+    process_data "$test_run_id" | \
+    while read -r line; do
+        echo "$line" >> "$temp_csv"
+        ((record_count++))
+        
+        if [ $record_count -ge $BATCH_SIZE ]; then
+            process_batch "$temp_csv" "$jtl_file" &
+            manage_background_process $!
+            record_count=0
+        fi
+        
+        if ! is_jmeter_running; then
+            return 1
+        fi
+    done
+}
+
 # Main monitoring loop
 update_status "running"
 
@@ -212,103 +289,14 @@ while true; do
         update_status "active"
         
         for JTL_FILE in $active_files; do
-            # Validate file exists and is readable
             [ ! -r "$JTL_FILE" ] && continue
             
             TEST_RUN_ID=$(basename "$JTL_FILE" .jtl)
-            POSITION_FILE="/tmp/jmeter_position_${TEST_RUN_ID}"
+            [ -f "/tmp/jmeter_position_${TEST_RUN_ID}" ] && continue
             
-            [ -f "$POSITION_FILE" ] && continue
+            TEMP_CSV=$(mktemp) || { echo "Failed to create temp file"; continue; }
             
-            # Process file in background with error handling
-            (
-                if is_jmeter_running; then
-                    echo "JMeter detected. Streaming results with ENVIRONMENT=$ENVIRONMENT, TEST_RUN_ID=$TEST_RUN_ID..."
-                    record_count=0
-                    
-                    # Monitor file changes
-                    if [ "$USE_INOTIFY" -eq 1 ]; then
-                        while inotifywait -q -e modify "$JTL_FILE" >/dev/null 2>&1; do
-                            read_chunk | awk -F',' '
-                            BEGIN { OFS=","; }
-                            !/timeStamp/ && NF > 12 {
-                                gsub("'\''", "'\'\''", $3);
-                                gsub("'\''", "'\'\''", $5);
-                                print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,"'"$ENVIRONMENT"'","'"$TEST_RUN_ID"'"
-                            }' | while read -r line; do
-                                echo "$line" >> "$TEMP_CSV"
-                                ((record_count++))
-                                
-                                if [ $record_count -ge $BATCH_SIZE ]; then
-                                    # Process in background to prevent blocking
-                                    (
-                                        if [ -s "$TEMP_CSV" ]; then
-                                            if ! psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -c "\COPY jmeter_results FROM '$TEMP_CSV' WITH (FORMAT csv);" 2>/dev/null; then
-                                                echo "Error: Failed to copy data to PostgreSQL for $JTL_FILE"
-                                                check_postgres
-                                            fi
-                                            echo -n > "$TEMP_CSV"
-                                        fi
-                                    ) &
-                                    record_count=0
-                                fi
-                                
-                                if ! is_jmeter_running; then
-                                    break 2
-                                fi
-                            done
-                        done
-                    else
-                        # Fallback polling mode
-                        while is_jmeter_running; do
-                            read_chunk | awk -F',' '
-                            BEGIN { OFS=","; }
-                            !/timeStamp/ && NF > 12 {
-                                gsub("'\''", "'\'\''", $3);
-                                gsub("'\''", "'\'\''", $5);
-                                print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,"'"$ENVIRONMENT"'","'"$TEST_RUN_ID"'"
-                            }' | while read -r line; do
-                                echo "$line" >> "$TEMP_CSV"
-                                ((record_count++))
-                                
-                                if [ $record_count -ge $BATCH_SIZE ]; then
-                                    # Process in background to prevent blocking
-                                    (
-                                        if [ -s "$TEMP_CSV" ]; then
-                                            if ! psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -c "\COPY jmeter_results FROM '$TEMP_CSV' WITH (FORMAT csv);" 2>/dev/null; then
-                                                echo "Error: Failed to copy data to PostgreSQL for $JTL_FILE"
-                                                check_postgres
-                                            fi
-                                            echo -n > "$TEMP_CSV"
-                                        fi
-                                    ) &
-                                    record_count=0
-                                fi
-                                
-                                if ! is_jmeter_running; then
-                                    break 2
-                                fi
-                            done
-                            sleep 0.1
-                        done
-                    fi
-                    
-                    # Final batch processing
-                    if [ -s "$TEMP_CSV" ]; then
-                        if ! psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -c "\COPY jmeter_results FROM '$TEMP_CSV' WITH (FORMAT csv);" 2>/dev/null; then
-                            echo "Error: Failed to copy data to PostgreSQL for $JTL_FILE"
-                            check_postgres
-                        fi
-                    fi
-                else
-                    echo "JMeter not running. Waiting..."
-                    sleep 5
-                fi
-                # Clean up position file when done
-                rm -f "$POSITION_FILE"
-            ) &
-            
-            # Track background process
+            (monitor_file "$JTL_FILE" "$TEST_RUN_ID" "$TEMP_CSV") &
             manage_background_process $!
         done
     else
