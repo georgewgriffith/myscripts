@@ -1,0 +1,6 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,Latency,IdleTime,Connect
+2018/07/13 12:48:03,262,359 /login,200,OK,Thread Group 1-1,text,true,,1356,411,1,1,261,0,244
+2018/07/13 12:48:03,19,360 /bundle.css,200,OK,Thread Group 1-1,text,true,,53006,435,1,1,12,0,0
+2018/07/13 12:48:03,2,361 /bundle.js,200,OK,Thread Group 1-1,text,true,,1998,419,1,1,2,0,0
+2018/07/13 12:48:03,3,368 /assets/config.json,200,OK,Thread Group 1-1,text,true,,451,462,1,1,3,0,0
+2018/07/13 12:48:03,286,359 /login,200,OK,"Number of samples in transaction : 4, number of failing samples : 0",Thread Group 1-1,TRUE,,56811,1727,1,1,278,0,244
