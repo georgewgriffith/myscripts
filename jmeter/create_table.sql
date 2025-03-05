@@ -1,17 +1,11 @@
--- JMeter Results Table Schema
--- Purpose: Store and analyze JMeter performance test results
-
 CREATE TABLE IF NOT EXISTS jmeter_results (
-    -- Primary key and identification
     id BIGSERIAL PRIMARY KEY,
     ci_job_id VARCHAR(100),
     
-    -- Timestamp information
     timeStamp VARCHAR(50),
     timestamp_tz TIMESTAMPTZ,
     inserted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
-    -- Basic JMeter metrics
     elapsed BIGINT,
     label VARCHAR(255),
     responseCode VARCHAR(10),
@@ -28,7 +22,6 @@ CREATE TABLE IF NOT EXISTS jmeter_results (
     IdleTime BIGINT,
     Connect BIGINT,
     
-    -- Regular columns for categorization (populated during insert)
     error_type VARCHAR(20),
     hour_of_day INT,
     minute_of_hour INT,
@@ -39,7 +32,6 @@ CREATE TABLE IF NOT EXISTS jmeter_results (
     is_controller BOOLEAN,
     request_type VARCHAR(20),
     
-    -- Generated columns for analysis (computed automatically)
     network_time BIGINT GENERATED ALWAYS AS (elapsed - Latency) STORED,
     success_bool BOOLEAN GENERATED ALWAYS AS (success IN ('true', 'TRUE')) STORED,
     response_category VARCHAR(20) GENERATED ALWAYS AS (
@@ -52,9 +44,9 @@ CREATE TABLE IF NOT EXISTS jmeter_results (
     ) STORED,
     apdex_value NUMERIC(3,2) GENERATED ALWAYS AS (
         CASE 
-            WHEN elapsed <= 500 THEN 1.0  -- Satisfied
-            WHEN elapsed <= 1500 THEN 0.5  -- Tolerating
-            ELSE 0.0  -- Frustrated
+            WHEN elapsed <= 500 THEN 1.0
+            WHEN elapsed <= 1500 THEN 0.5
+            ELSE 0.0
         END
     ) STORED,
     meets_slo BOOLEAN GENERATED ALWAYS AS (
@@ -102,31 +94,21 @@ CREATE TABLE IF NOT EXISTS jmeter_results (
     ) STORED
 );
 
--- Core indexes for performance
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_timestamp_tz ON jmeter_results (timestamp_tz);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_ci_job_id ON jmeter_results (ci_job_id);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_label ON jmeter_results (label);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_success_bool ON jmeter_results (success_bool);
 
--- Time-based analysis indexes
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_hour_of_day ON jmeter_results (hour_of_day);
 
--- Categorization indexes
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_response_category ON jmeter_results (response_category);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_error_type ON jmeter_results (error_type);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_endpoint_category ON jmeter_results (endpoint_category);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_request_type ON jmeter_results (request_type);
 
--- Performance metrics indexes
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_apdex_value ON jmeter_results (apdex_value);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_meets_slo ON jmeter_results (meets_slo);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_is_slow_outlier ON jmeter_results (is_slow_outlier);
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_throughput_bin ON jmeter_results (throughput_bin);
 
--- JMeter report type indexes
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_is_sampler ON jmeter_results (is_sampler);
-
--- Uniqueness constraint to prevent duplicate records
-ALTER TABLE jmeter_results ADD CONSTRAINT jmeter_results_ci_job_id_timestamp_label_uk 
-  UNIQUE (ci_job_id, timestamp_tz, label, elapsed)
-  WHERE NOT is_transaction;

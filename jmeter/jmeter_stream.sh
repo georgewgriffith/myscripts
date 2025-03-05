@@ -198,14 +198,14 @@ process_line() {
     IdleTime,\n\
     Connect,\n\
     error_type,\n\
-    hour_of_day,\n\
-    minute_of_hour,\n\
-    day_of_week,\n\
-    is_transaction,\n\
     endpoint_category,\n\
+    is_transaction,\n\
     is_sampler,\n\
     is_controller,\n\
-    request_type\n\
+    request_type,\n\
+    hour_of_day,\n\
+    minute_of_hour,\n\
+    day_of_week\n\
 ) VALUES (\n\
     %s,\n\
     %s,\n\
@@ -225,14 +225,15 @@ process_line() {
     %s,\n\
     %s,\n\
     %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
     EXTRACT(HOUR FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
     EXTRACT(MINUTE FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
-    EXTRACT(DOW FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s\n\
+    EXTRACT(DOW FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"'))\n\
 );\n",
         quote(ci_job),
         quote($1),
@@ -253,14 +254,14 @@ process_line() {
         normalize_number($15),
         normalize_number($16),
         quote(error_type),
-        quote($1),
-        quote($1),
-        quote($1),
-        is_transact,
         quote(endpoint_cat),
+        is_transact,
         is_samp,
         is_cont,
-        quote(req_type)
+        quote(req_type),
+        quote($1),
+        quote($1),
+        quote($1)
     }' | psql -q
 }
 
