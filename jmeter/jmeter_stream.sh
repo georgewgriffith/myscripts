@@ -88,7 +88,7 @@ generate_report() {
 }
 
 # Set filename and timeout values
-RESULTS_FILE="${CI_JOB_ID}.jtl"
+RESULTS_FILE="/opt/jmeter/results/${CI_JOB_ID}.jtl"
 MAX_WAIT_SECONDS=300  # 5 minutes timeout
 WAIT_INTERVAL=5       # Check every 5 seconds
 
