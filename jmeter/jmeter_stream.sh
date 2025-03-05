@@ -267,7 +267,7 @@ process_line() {
 
 # Stream the file with JMeter process monitoring
 {
-    tail -n +1 -f "${RESULTS_FILE}" | while IFS= read -r line; do
+    sudo tail -n +1 -f "${RESULTS_FILE}" | while IFS= read -r line; do
         process_line "$line"
         
         # Check if JMeter is still running
