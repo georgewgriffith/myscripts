@@ -7,13 +7,44 @@ usage() {
     exit 1
 }
 
+# Check required commands
+for cmd in pgrep psql zip awk tail mkdir rm; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "Error: Required command '$cmd' not found"
+        exit 1
+    fi
+done
+
 # Configuration
-JMETER_HOME="${JMETER_HOME:-/opt/jmeter}"
+JMETER_BIN="/opt/jmeter/bin/jmeter"
 EXPORT_DIR="/opt/jmeter/export"
+
+# Check JMeter binary
+if [ ! -x "${JMETER_BIN}" ]; then
+    echo "Error: JMeter binary not found or not executable at ${JMETER_BIN}"
+    exit 1
+fi
+
+# Validate arguments
+if [ $# -ne 1 ]; then
+    echo "Error: CI job ID parameter is required"
+    usage
+fi
+
+CI_JOB_ID="$1"
+if [ -z "$CI_JOB_ID" ]; then
+    echo "Error: CI job ID cannot be empty"
+    usage
+fi
+
+# Now we can safely define REPORT_DIR
 REPORT_DIR="/tmp/report_${CI_JOB_ID}"
 
 # Create export directory if it doesn't exist
-mkdir -p "${EXPORT_DIR}"
+if ! mkdir -p "${EXPORT_DIR}"; then
+    echo "Error: Failed to create export directory ${EXPORT_DIR}"
+    exit 1
+fi
 
 # Function to generate and archive HTML report
 generate_report() {
@@ -26,8 +57,8 @@ generate_report() {
     rm -rf "${REPORT_DIR}"
     mkdir -p "${REPORT_DIR}"
     
-    # Generate HTML report
-    if ! "${JMETER_HOME}/bin/jmeter.sh" -g "${jtl_file}" -o "${REPORT_DIR}"; then
+    # Generate HTML report using explicit jmeter binary
+    if ! "${JMETER_BIN}" -g "${jtl_file}" -o "${REPORT_DIR}"; then
         echo "Error: Failed to generate HTML report"
         return 1
     fi
@@ -55,18 +86,6 @@ generate_report() {
     echo "Results archived to: ${results_archive}"
     return 0
 }
-
-# Validate arguments
-if [ $# -ne 1 ]; then
-    echo "Error: CI job ID parameter is required"
-    usage
-fi
-
-CI_JOB_ID="$1"
-if [ -z "$CI_JOB_ID" ]; then
-    echo "Error: CI job ID cannot be empty"
-    usage
-fi
 
 # Set filename and timeout values
 RESULTS_FILE="${CI_JOB_ID}.jtl"
@@ -104,29 +123,144 @@ process_line() {
     
     # Convert the line to PostgreSQL INSERT statement
     echo "$line" | awk -v FPAT='([^,]+)|(\"[^\"]+\")' -v ci_job="$CI_JOB_ID" '
+    function quote(str) {
+        gsub(/"/, "\"\"", str)  # Escape quotes for PostgreSQL
+        gsub(/[\r\n\t]/, " ", str)  # Clean special chars
+        return "'"'"'" str "'"'"'"
+    }
+    
+    function normalize_number(val) {
+        return (val == "" || val ~ /[^0-9]/) ? "0" : val
+    }
+    
     {
-        # Process each field to remove/escape quotes properly
-        for (i=1; i<=NF; i++) {
-            # Remove outer quotes if present
-            gsub(/^"|"$/, "", $i)
-            # Double escape any quotes for PostgreSQL
-            gsub(/"/, "\"\"", $i)
-            # Clean any newlines or special chars
-            gsub(/[\r\n\t]/, " ", $i)
+        # Ensure we have all fields, pad with empty strings if needed
+        for (i=1; i<=16; i++) {
+            if (i > NF) $i = ""
         }
         
-        printf "INSERT INTO jmeter_results (\
-ci_job_id, timeStamp, timestamp_tz, elapsed, label, responseCode, \
-responseMessage, threadName, dataType, success, failureMessage, \
-bytes, sentBytes, grpThreads, allThreads, Latency, IdleTime, Connect\
-) VALUES (\
-'"'"'%s'"'"', '"'"'%s'"'"', \
-to_timestamp('"'"'%s'"'"', '"'"'YYYY/MM/DD HH24:MI:SS'"'"'), \
-%s, '"'"'%s'"'"', '"'"'%s'"'"', \
-'"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', upper('"'"'%s'"'"'), \
-'"'"'%s'"'"', %s, %s, %s, %s, %s, %s, %s);\n", \
-        ci_job, $1, $1, $2, $3, $4, $5, $6, $7, $8, $9, \
-        $10, $11, $12, $13, $14, $15, $16
+        # Remove outer quotes from all fields
+        for (i=1; i<=NF; i++) {
+            gsub(/^"|"$/, "", $i)
+        }
+
+        # Calculate values for fields that were moved from generated columns
+        
+        # Extract hour, minute, day from timestamp (now done in SQL)
+        is_transact = ($5 ~ /number of samples in transaction/) ? "true" : "false"
+        
+        # Error type determination
+        error_type = "Success"
+        if ($8 == "false" || $8 == "FALSE") {
+            if ($4 ~ /^5/) error_type = "Server Error"
+            else if ($4 ~ /^4/) error_type = "Client Error"
+            else error_type = "Other Error"
+        }
+        
+        # Endpoint category determination
+        endpoint_cat = "Other"
+        if ($3 ~ /\/api\//) endpoint_cat = "API"
+        else if ($3 ~ /\/login/) endpoint_cat = "Authentication"
+        else if ($3 ~ /\/assets\//) endpoint_cat = "Static Assets"
+        else if ($3 ~ /\.js/) endpoint_cat = "Static Assets"
+        else if ($3 ~ /\.css/) endpoint_cat = "Static Assets"
+        
+        # Request type determination
+        req_type = "Other"
+        if ($3 ~ /\.css/) req_type = "CSS"
+        else if ($3 ~ /\.js/) req_type = "JavaScript"
+        else if ($3 ~ /\.jpg/ || $3 ~ /\.png/ || $3 ~ /\.gif/) req_type = "Image"
+        else if ($3 ~ /\.html/ || $3 ~ /\.htm/) req_type = "HTML"
+        else if ($3 ~ /\/api\//) req_type = "API"
+        
+        # Is sampler/controller determination
+        is_samp = (is_transact == "false" && !($3 ~ /overall/)) ? "true" : "false"
+        is_cont = ($3 ~ /controller/ || $3 ~ /-all/ || $3 ~ /overall/) ? "true" : "false"
+        
+        # Prepare SQL statement with the additional calculated fields
+        printf "INSERT INTO jmeter_results (\n\
+    ci_job_id,\n\
+    timeStamp,\n\
+    timestamp_tz,\n\
+    elapsed,\n\
+    label,\n\
+    responseCode,\n\
+    responseMessage,\n\
+    threadName,\n\
+    dataType,\n\
+    success,\n\
+    failureMessage,\n\
+    bytes,\n\
+    sentBytes,\n\
+    grpThreads,\n\
+    allThreads,\n\
+    Latency,\n\
+    IdleTime,\n\
+    Connect,\n\
+    error_type,\n\
+    hour_of_day,\n\
+    minute_of_hour,\n\
+    day_of_week,\n\
+    is_transaction,\n\
+    endpoint_category,\n\
+    is_sampler,\n\
+    is_controller,\n\
+    request_type\n\
+) VALUES (\n\
+    %s,\n\
+    %s,\n\
+    to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"'),\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    EXTRACT(HOUR FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
+    EXTRACT(MINUTE FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
+    EXTRACT(DOW FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s,\n\
+    %s\n\
+);\n",
+        quote(ci_job),
+        quote($1),
+        quote($1),
+        normalize_number($2),
+        quote($3),
+        quote($4),
+        quote($5),
+        quote($6),
+        quote($7),
+        quote(toupper($8)),
+        quote($9),
+        normalize_number($10),
+        normalize_number($11),
+        normalize_number($12),
+        normalize_number($13),
+        normalize_number($14),
+        normalize_number($15),
+        normalize_number($16),
+        quote(error_type),
+        quote($1),
+        quote($1),
+        quote($1),
+        is_transact,
+        quote(endpoint_cat),
+        is_samp,
+        is_cont,
+        quote(req_type)
     }' | psql -q
 }
 
