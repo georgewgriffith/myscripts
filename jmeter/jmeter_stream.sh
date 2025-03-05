@@ -103,26 +103,29 @@ process_line() {
     fi
     
     # Convert the line to PostgreSQL INSERT statement
-    echo "$line" | awk -F',' -v ci_job="$CI_JOB_ID" '
+    echo "$line" | awk -v FPAT='([^,]+)|(\"[^\"]+\")' -v ci_job="$CI_JOB_ID" '
     {
-        # Save original field separator
-        FPAT = "([^,]+)|(\"[^\"]+\")"
-        
-        # Remove surrounding quotes and escape internal quotes
+        # Process each field to remove/escape quotes properly
         for (i=1; i<=NF; i++) {
+            # Remove outer quotes if present
             gsub(/^"|"$/, "", $i)
+            # Double escape any quotes for PostgreSQL
             gsub(/"/, "\"\"", $i)
+            # Clean any newlines or special chars
+            gsub(/[\r\n\t]/, " ", $i)
         }
         
         printf "INSERT INTO jmeter_results (\
-ci_job_id, timeStamp, elapsed, label, responseCode, \
+ci_job_id, timeStamp, timestamp_tz, elapsed, label, responseCode, \
 responseMessage, threadName, dataType, success, failureMessage, \
 bytes, sentBytes, grpThreads, allThreads, Latency, IdleTime, Connect\
 ) VALUES (\
-'"'"'%s'"'"', '"'"'%s'"'"', %s, '"'"'%s'"'"', '"'"'%s'"'"', \
-'"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', \
+'"'"'%s'"'"', '"'"'%s'"'"', \
+to_timestamp('"'"'%s'"'"', '"'"'YYYY/MM/DD HH24:MI:SS'"'"'), \
+%s, '"'"'%s'"'"', '"'"'%s'"'"', \
+'"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', upper('"'"'%s'"'"'), \
 '"'"'%s'"'"', %s, %s, %s, %s, %s, %s, %s);\n", \
-        ci_job, $1, $2, $3, $4, $5, $6, $7, $8, $9, \
+        ci_job, $1, $1, $2, $3, $4, $5, $6, $7, $8, $9, \
         $10, $11, $12, $13, $14, $15, $16
     }' | psql -q
 }

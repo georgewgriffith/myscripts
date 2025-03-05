@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS jmeter_results (
     id BIGSERIAL PRIMARY KEY,
     ci_job_id VARCHAR(100),
     timeStamp VARCHAR(50),
-    timestamp_tz TIMESTAMPTZ GENERATED ALWAYS AS (to_timestamp(timeStamp, 'YYYY/MM/DD HH24:MI:SS')) STORED,
+    timestamp_tz TIMESTAMPTZ,  -- Changed to regular column
     inserted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     elapsed BIGINT,
     label VARCHAR(255),
