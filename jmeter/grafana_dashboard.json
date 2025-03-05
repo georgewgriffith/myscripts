@@ -11,7 +11,7 @@
         "type": "dashboard"
       },
       {
-        "datasource": "PostgreSQL",
+        "datasource": "jmeter-postgres",
         "enable": true,
         "iconColor": "#5794F2",
         "name": "Test Start",
@@ -44,7 +44,7 @@
       "type": "row"
     },
     {
-      "datasource": "PostgreSQL",
+      "datasource": "jmeter-postgres",
       "fieldConfig": {
         "defaults": {
           "mappings": [],
