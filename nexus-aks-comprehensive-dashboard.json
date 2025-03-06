@@ -1,0 +1,1274 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "azure-monitor",
+          "uid": "azure-monitor"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "name": "AKS Events",
+        "target": {
+          "limit": 100,
+          "matchAny": true,
+          "tags": ["aks", "events"],
+          "type": "tags"
+        }
+      }
+    ]
+  },
+  "description": "Comprehensive Azure AKS Dashboard for Nexus Repository Manager with Azure PostgreSQL and Storage Account metrics",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "Overview & Status",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "node_count",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "AKS Node Count",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "node_cpu_usage_percentage",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Cluster CPU Usage",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "node_memory_working_set_percentage",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Cluster Memory Usage",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Down"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Up"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "kube_pod_status_ready",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A",
+          "queryType": "Azure Monitor",
+          "subscription": "${subscription_id}"
+        }
+      ],
+      "title": "Nexus Pod Status",
+      "type": "stat",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["pod_name", "value"]
+            }
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "config": {
+                  "id": "regex",
+                  "options": {
+                    "pattern": "nexus"
+                  }
+                },
+                "fieldName": "pod_name"
+              }
+            ],
+            "match": "any",
+            "type": "include"
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "active_connections",
+            "metricNamespace": "Microsoft.DBforPostgreSQL/servers",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${postgres_server_name}"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "PostgreSQL Active Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99
+              },
+              {
+                "color": "red",
+                "value": 99.9
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 7,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "UsedCapacity",
+            "metricNamespace": "Microsoft.Storage/storageAccounts",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${storage_account_name}"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Storage Account Usage",
+      "type": "gauge"
+    },
+    {
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 8,
+      "title": "AKS Cluster Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "node_cpu_usage_percentage",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}",
+            "timeGrain": "auto"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Node CPU Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "node_memory_working_set_percentage",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}",
+            "timeGrain": "auto"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Node Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "dimensionFilters": [],
+            "metricName": "node_network_in_bytes",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}",
+            "timeGrain": "auto"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Network In",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "dimensionFilters": [],
+            "metricName": "node_network_out_bytes",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}",
+            "timeGrain": "auto"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Network Out",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Average",
+            "dimensionFilters": [],
+            "metricName": "node_disk_used_bytes",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}",
+            "timeGrain": "auto"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Disk Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "azure-monitor",
+        "uid": "azure-monitor"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.1",
+      "targets": [
+        {
+          "azureMonitor": {
+            "aggregation": "Total",
+            "dimensionFilters": [],
+            "metricName": "pod_count",
+            "metricNamespace": "Microsoft.ContainerService/managedClusters",
+            "resourceGroup": "${resource_group}",
+            "resourceName": "${cluster_name}",
+            "timeGrain": "auto"
+          },
+          "datasource": {
+            "type": "azure-monitor",
+            "uid": "azure-monitor"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Pod Count",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 38,
+  "tags": ["azure", "aks", "nexus", "postgresql", "storage"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "Azure Subscription ID",
+        "hide": 0,
+        "label": "Subscription",
+        "name": "subscription_id",
+        "options": [],
+        "query": "subscriptions()",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query",
+        "datasource": {
+          "type": "azure-monitor",
+          "uid": "azure-monitor"
+        }
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "Resource Group containing AKS cluster",
+        "hide": 0,
+        "label": "Resource Group",
+        "name": "resource_group",
+        "options": [],
+        "query": "resourceGroups()",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query",
+        "datasource": {
+          "type": "azure-monitor",
+          "uid": "azure-monitor"
+        }
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "AKS Cluster Name",
+        "hide": 0,
+        "label": "AKS Cluster",
+        "name": "cluster_name",
+        "options": [],
+        "query": "resources('Microsoft.ContainerService/managedClusters', $subscription_id, $resource_group)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query",
+        "datasource": {
+          "type": "azure-monitor",
+          "uid": "azure-monitor"
+        }
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "PostgreSQL Server Name",
+        "hide": 0,
+        "label": "PostgreSQL Server",
+        "name": "postgres_server_name",
+        "options": [],
+        "query": "resources('Microsoft.DBforPostgreSQL/servers', $subscription_id, $resource_group)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query",
+        "datasource": {
+          "type": "azure-monitor",
+          "uid": "azure-monitor"
+        }
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "Storage Account Name",
+        "hide": 0,
+        "label": "Storage Account",
+        "name": "storage_account_name",
+        "options": [],
+        "query": "resources('Microsoft.Storage/storageAccounts', $subscription_id, $resource_group)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query",
+        "datasource": {
+          "type": "azure-monitor",
+          "uid": "azure-monitor"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Nexus on AKS Comprehensive Dashboard",
+  "uid": "nexus-aks-comprehensive",
+  "version": 1,
+  "weekStart": ""
+}
