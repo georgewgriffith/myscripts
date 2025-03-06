@@ -126,6 +126,10 @@ process_line() {
     function quote(str) {
         gsub(/"/, "\"\"", str)  # Escape quotes for PostgreSQL
         gsub(/[\r\n\t]/, " ", str)  # Clean special chars
+        # Trim very long strings to prevent exceeding column size limits
+        if (length(str) > 45 && index($0, "responseCode") > 0) {
+            return "'"'"'" substr(str, 1, 45) "'"'"'"
+        }
         return "'"'"'" str "'"'"'"
     }
     
@@ -230,7 +234,6 @@ process_line() {
     %s,\n\
     %s,\n\
     %s,\n\
-    %s,\n\
     EXTRACT(HOUR FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
     EXTRACT(MINUTE FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
     EXTRACT(DOW FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"'))\n\
@@ -262,8 +265,11 @@ process_line() {
         quote($1),
         quote($1),
         quote($1)
-    }' | psql -q
+    }' | PGPASSWORD=${DB_PASSWORD:-postgres} psql -h ${DB_HOST:-localhost} -U ${DB_USER:-postgres} -d ${DB_NAME:-jmeter} -q
 }
+
+# Before streaming starts, add environment variable usage for DB connection
+echo "Connecting to database: ${DB_HOST:-localhost}/${DB_NAME:-jmeter} as ${DB_USER:-postgres}"
 
 # Stream the file with JMeter process monitoring
 {

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS jmeter_results (
     
     elapsed BIGINT,
     label VARCHAR(255),
-    responseCode VARCHAR(10),
+    responseCode VARCHAR(50),
     responseMessage TEXT,
     threadName VARCHAR(255),
     dataType VARCHAR(50),
@@ -112,3 +112,19 @@ CREATE INDEX IF NOT EXISTS idx_jmeter_results_is_slow_outlier ON jmeter_results 
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_throughput_bin ON jmeter_results (throughput_bin);
 
 CREATE INDEX IF NOT EXISTS idx_jmeter_results_is_sampler ON jmeter_results (is_sampler);
+
+-- Add permissions for the sequence and table
+DO $$
+DECLARE
+    db_user TEXT;
+BEGIN
+    -- Get the current user
+    SELECT current_user INTO db_user;
+    
+    -- Grant permissions to the sequence
+    EXECUTE format('GRANT USAGE, SELECT, UPDATE ON SEQUENCE jmeter_results_id_seq TO %I', db_user);
+    
+    -- Grant full permissions to the table
+    EXECUTE format('GRANT ALL PRIVILEGES ON TABLE jmeter_results TO %I', db_user);
+END
+$$;
