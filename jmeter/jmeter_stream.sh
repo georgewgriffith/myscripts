@@ -113,7 +113,7 @@ is_jmeter_running() {
     return $?
 }
 
-# Function to process and insert a line
+# Function to process and insert a line - FIX QUOTES ISSUE HERE
 process_line() {
     local line="$1"
     # Skip header line
@@ -121,23 +121,8 @@ process_line() {
         return
     fi
     
-    # Convert the line to PostgreSQL INSERT statement
-    echo "$line" | awk -v FPAT='([^,]+)|(\"[^\"]+\")' -v ci_job="$CI_JOB_ID" '
-    function quote(str) {
-        gsub(/"/, "\"\"", str)  # Escape quotes for PostgreSQL
-        gsub(/[\r\n\t]/, " ", str)  # Clean special chars
-        # Trim very long strings to prevent exceeding column size limits
-        if (length(str) > 45 && index($0, "responseCode") > 0) {
-            return "'"'"'" substr(str, 1, 45) "'"'"'"
-        }
-        return "'"'"'" str "'"'"'"
-    }
-    
-    function normalize_number(val) {
-        return (val == "" || val ~ /[^0-9]/) ? "0" : val
-    }
-    
-    {
+    # Use a simpler approach to avoid quote escaping issues in CI/CD pipeline
+    echo "$line" | awk -v FPAT='([^,]+)|(\"[^\"]+\")' -v ci_job="$CI_JOB_ID" '{
         # Ensure we have all fields, pad with empty strings if needed
         for (i=1; i<=16; i++) {
             if (i > NF) $i = ""
@@ -149,8 +134,6 @@ process_line() {
         }
 
         # Calculate values for fields that were moved from generated columns
-        
-        # Extract hour, minute, day from timestamp (now done in SQL)
         is_transact = ($5 ~ /number of samples in transaction/) ? "true" : "false"
         
         # Error type determination
@@ -181,90 +164,35 @@ process_line() {
         is_samp = (is_transact == "false" && !($3 ~ /overall/)) ? "true" : "false"
         is_cont = ($3 ~ /controller/ || $3 ~ /-all/ || $3 ~ /overall/) ? "true" : "false"
         
-        # Prepare SQL statement with the additional calculated fields
-        printf "INSERT INTO jmeter_results (\n\
-    ci_job_id,\n\
-    timeStamp,\n\
-    timestamp_tz,\n\
-    elapsed,\n\
-    label,\n\
-    responseCode,\n\
-    responseMessage,\n\
-    threadName,\n\
-    dataType,\n\
-    success,\n\
-    failureMessage,\n\
-    bytes,\n\
-    sentBytes,\n\
-    grpThreads,\n\
-    allThreads,\n\
-    Latency,\n\
-    IdleTime,\n\
-    Connect,\n\
-    error_type,\n\
-    endpoint_category,\n\
-    is_transaction,\n\
-    is_sampler,\n\
-    is_controller,\n\
-    request_type,\n\
-    hour_of_day,\n\
-    minute_of_hour,\n\
-    day_of_week\n\
-) VALUES (\n\
-    %s,\n\
-    %s,\n\
-    to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"'),\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    %s,\n\
-    EXTRACT(HOUR FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
-    EXTRACT(MINUTE FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"')),\n\
-    EXTRACT(DOW FROM to_timestamp(%s, '"'"'YYYY/MM/DD HH24:MI:SS'"'"'))\n\
-);\n",
-        quote(ci_job),
-        quote($1),
-        quote($1),
-        normalize_number($2),
-        quote($3),
-        quote($4),
-        quote($5),
-        quote($6),
-        quote($7),
-        quote(toupper($8)),
-        quote($9),
-        normalize_number($10),
-        normalize_number($11),
-        normalize_number($12),
-        normalize_number($13),
-        normalize_number($14),
-        normalize_number($15),
-        normalize_number($16),
-        quote(error_type),
-        quote(endpoint_cat),
-        is_transact,
-        is_samp,
-        is_cont,
-        quote(req_type),
-        quote($1),
-        quote($1),
-        quote($1)
+        # Define functions inline to avoid quoting issues
+        function normalize_number(val) {
+            return (val == "" || val ~ /[^0-9]/) ? "0" : val
+        }
+        
+        # Clean and prepare values
+        ts = $1
+        elapsed = normalize_number($2)
+        label = $3
+        respCode = $4
+        respMsg = $5
+        threadName = $6
+        dataType = $7
+        success = toupper($8)
+        failMsg = $9
+        bytes = normalize_number($10)
+        sentBytes = normalize_number($11)
+        grpThreads = normalize_number($12)
+        allThreads = normalize_number($13)
+        latency = normalize_number($14)
+        idleTime = normalize_number($15)
+        connect = normalize_number($16)
+        
+        # Print simpler SQL instead of the complex multi-line format
+        printf "INSERT INTO jmeter_results (ci_job_id, timeStamp, timestamp_tz, elapsed, label, responseCode, responseMessage, threadName, dataType, success, failureMessage, bytes, sentBytes, grpThreads, allThreads, Latency, IdleTime, Connect, error_type, endpoint_category, is_transaction, is_sampler, is_controller, request_type, hour_of_day, minute_of_hour, day_of_week) VALUES ('"'"'%s'"'"', '"'"'%s'"'"', to_timestamp('"'"'%s'"'"', '"'"'YYYY/MM/DD HH24:MI:SS'"'"'), %s, '"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', '"'"'%s'"'"', %s, %s, %s, %s, %s, %s, %s, '"'"'%s'"'"', '"'"'%s'"'"', %s, %s, %s, '"'"'%s'"'"', EXTRACT(HOUR FROM to_timestamp('"'"'%s'"'"', '"'"'YYYY/MM/DD HH24:MI:SS'"'"')), EXTRACT(MINUTE FROM to_timestamp('"'"'%s'"'"', '"'"'YYYY/MM/DD HH24:MI:SS'"'"')), EXTRACT(DOW FROM to_timestamp('"'"'%s'"'"', '"'"'YYYY/MM/DD HH24:MI:SS'"'"')));\n", 
+          ci_job, ts, ts, elapsed, label, respCode, respMsg, threadName, dataType, 
+          success, failMsg, bytes, sentBytes, grpThreads, allThreads, latency, 
+          idleTime, connect, error_type, endpoint_cat, is_transact, is_samp, 
+          is_cont, req_type, ts, ts, ts)
     }' | PGPASSWORD=${DB_PASSWORD:-postgres} psql -h ${DB_HOST:-localhost} -U ${DB_USER:-postgres} -d ${DB_NAME:-jmeter} -q
 }
 
@@ -274,7 +202,16 @@ echo "Connecting to database: ${DB_HOST:-localhost}/${DB_NAME:-jmeter} as ${DB_U
 # Stream the file with JMeter process monitoring
 {
     sudo tail -n +1 -f "${RESULTS_FILE}" | while IFS= read -r line; do
+        # Add error handling for pipeline execution
+        set +e
         process_line "$line"
+        status=$?
+        set -e
+        
+        # Log any processing errors for debugging in CI/CD
+        if [ $status -ne 0 ]; then
+            echo "Error processing line: $line" >&2
+        fi
         
         # Check if JMeter is still running
         if ! is_jmeter_running; then
